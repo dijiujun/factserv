@@ -83,11 +83,14 @@ try:
         return v
 
     # vaildate buildid, return dict containing the builds table row
+    # postgres array syntax is borked
+    # build["phaseX"] is true if phase X is enabled on the requesting station
+    # build["hasphaseX"] is true if phase X is enabled on *any* station
     def checkbuild(buildid):
-        cur.execute("select filename, provision, %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4) from builds where buildid=%s", (station, station, station, station, buildid))
+        cur.execute("select provision, %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), 0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL from builds where buildid=%s", (station, station, station, station, buildid))
         if not cur.rowcount: raise Exception("Invalid buildid '%s'" % (buildid,))
         build={}
-        build["filename"],build["provision"],build["phase1"],build["phase2"],build["phase3"],build["phase4"]=cur.fetchone()
+        build["provision"],build["phase1"],build["phase2"],build["phase3"],build["phase4"],build["hasphase2"],build["hasphase3"],build["hasphase4"]=cur.fetchone()
         if not (build["phase1"] or build["phase2"] or build["phase3"] or build["phase4"]): raise Exception("Buildid %s not enabled for station %s" % (value, station))
         return build
 
@@ -175,7 +178,7 @@ try:
         if state != "TESTING": raise Exception("Expected deviceid %s state TESTING, actual state is %s" % (deviceid, state))
 
         build = checkbuild(buildid)
-        if (phase==1 and build["phase2"]) or (phase==2 and build["phase3"]) or (phase==3 and build["phase4"]):
+        if (phase==1 and build["hasphase2"]) or (phase==2 and build["hasphase3"]) or (phase==3 and build["hasphase4"]):
             state="PASSED" # prepare for next phase
         else:
             state="COMPLETE" # there is no next phase!

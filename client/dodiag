@@ -6,8 +6,7 @@ import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signa
 
 buildID=None                    # must be specified on command line
 deviceID=None                   # can be specified, otherwise we'll try to discover it
-pionicIP="192.168.111.1"        # IP address of pionic controller
-serverIP=None                   # IP address of the factory server                      
+pionicIP="192.168.111.1"        # IP address of pionic controller-p
 script_path="."                 # Path to phaseX scripts
 
 # Things we say, in various lanuages
@@ -22,7 +21,7 @@ def language(s): return [s[0],s[2]]
 
 # parse options
 try:
-    opts, args = getopt.getopt(sys.argv[1:],'p:s:t:')
+    opts, args = getopt.getopt(sys.argv[1:],'p:t:')
 except:
     print """\
 Usage:
@@ -32,7 +31,6 @@ Usage:
 Interact with factory server and perform diagnostics. Options are:
 
     -p ip.ad.re.ss    - pionic IP address, default is "192.168.111.1"
-    -s ip.ad.re.ss    - factory server IP address, default is to request it from pionic
     -t path           - path to "phaseX" test lists, default './' 
 
 The caller must always provide the build ID.
@@ -53,12 +51,10 @@ if len(args) > 1: deviceID=args[1]
 
 for opt, arg in opts:
     if opt == '-p': pionicIP=arg
-    elif opt == '-s': serverIP=arg
     elif opt == '-t': scriptpath=arg.rstrip("/"); 
 
 class PionicFail(Exception): pass
 # Send a request to the pionic controller, return response 
-# The IP of the pionic controller is hard coded
 # If data is provided, it is will sent as raw POST content
 def pionic(request, data=None, debug=0):
     c=httplib.HTTPConnection(pionicIP)
@@ -85,11 +81,11 @@ def wrap(text): return reduce(lambda line, word: '%s%s%s' % (line, ' \n'[(len(li
 def report(text, fg="white", bg="blue", size=30):
     pionic("display?text&size=%d&fg=%s&bg=%s"%(size,fg,bg),wrap(text))
 
-# request factory service from serverIP
-class ServerFail(Exception): pass
-def server(service, options={}, debug=0):
+# request service from factory server via pionic port 61080
+class FactoryFail(Exception): pass
+def factory(service, options={}, debug=0):
     options["service"]=service
-    c=httplib.HTTPConnection(serverIP)
+    c=httplib.HTTPConnection(pionicIP,port=61080);
     c.set_debuglevel(debug)
     options=urllib.urlencode(options)
     if len(options)<512:
@@ -99,7 +95,7 @@ def server(service, options={}, debug=0):
         c.request("POST","/cgi-bin/factory", options, {"Content-Type":"application/x-www-form-urlencoded"})
     r=c.getresponse()
     if r.status != 200:
-        raise ServerFail("Service %s failed with '%s'" % (service, r.reason))
+        raise FactoryFail("Service %s failed with '%s'" % (service, r.reason))
     return r.read().strip()    
 
 # perform an arbitrary shell command with timeout, return exit status and
@@ -127,81 +123,151 @@ def perform(command, timeout):
     for l in stdout.splitlines(): print "  ",l
     return (status, stdout)
 
-
 # This is the main test loop
-class TestFail(Exception): pass
 try:
     badge("\n".join(language(test_in_progress)))
 
     print "Build ID is", buildID
     print "Pionic IP is", pionicIP 
 
-    if serverIP is None:
-        print "Factory IP unknown, requesting from pionic"
-        serverIP=pionic("factory")
-    print "Server IP is",serverIP
-
     if deviceID is None:
-        print "Proivisioning deviceID"
-        server("newdevice",{"buildid": buildID})
+        print "Provisioning deviceID"
+        factory("newdevice",{"buildid": buildID})
         badge("\n".join(language(scan_barcode)), fg="black", bg="yellow")
-        while True:
-           deviceID=pionic("getbar?poll&timeout=4") # poll with shortish timeout
-           if deviceID != "": break
+        deviceID=pionic("getbar?flush&timeout=3")
+        while not deviceID:
+           deviceID=pionic("getbar?timeout=3") # poll with shortish timeout
         badge(None)
-	print "Got %s, updating server" % (deviceID,)
-        server("newdevice",{"deviceid":deviceID, "buildid": buildID})
+	print "Got %s, updating server" % deviceID
+        factory("newdevice",{"deviceid":deviceID, "buildid": buildID})
    
     print "Device ID is", deviceID    
     
     # Pass info to test processes in the environment
-    os.environ["SERVERIP"]=serverIP
     os.environ["PIONICIP"]=pionicIP
     os.environ["BUILDID"]=buildID
     os.environ["DEVICEID"]=deviceID 
 
-    phase=server("startdiag",{"deviceid":deviceID, "buildid":buildID})
+    phase=factory("startdiag",{"deviceid":deviceID, "buildid":buildID})
 
     script="%s/phase%s" % (script_path, phase)
-    print "Using script %s"%(script,)
+    print "Using test list %s" % script
+
+    # flags that can be set or cleared by testlist
+    flags={"IgnoreFail":False, "Failed":False}
+
+    # Parse the test list file in a list of dicts.   
+    # A dict may contain:
+    #   {"op":"test", "testname":"s", "timeout":N, "command":"s"}   - execute command with timeout
+    #   {"op":"push", "count":N}                                    - push a new loop count
+    #   {"op":"dbnz", "index",I}                                    - decrement the loop count, if zero pop the loop count and continue. Else branch to specified index.
+    #   {"op":"set", "flag":"name"}                                 - set named flag
+    #   {"op":"clear", "flag":"name"}                               - clear named flag
+    operation=[]
+    pushed=[]
     line=0
+    class ParseFail(Exception): 
+        def __init__(self, args):
+            Exception.__init__("%s line %d - %s" % (script, line, format(args)))
     for l in open(script):
         line+=1
         l=l.split('#')[0].strip()
         if not l: continue
-        print "%s line %d: %s" % (script, line, l)
-        t=l.split(':',2)
-        if len(t) != 3: raise TestFail("%s line %d is invalid" % (script, line))
-        testname=" ".join(t[0].split())
-        if not testname: raise TestFail("%s line %d name is invalid" % (script, line))
-        try:
-            timeout=int(t[1].strip() or "60")
-            if (timeout <= 0): raise ValueError
-        except ValueError:
-            raise TestFail("%s line %d timeout is invalid" % (script, line))
-        command=" ".join(t[2].split())
-        if not command: raise TestFail("%s line %d command is invalid" % (script, line))
-        # catch too many ::'s
-        if command.startswith(":"): raise TestFail("%s line %d command is invalid" % (script, line))
-        report(("\n".join(language(test_in_progress))+"\n\n"+
-                "Device ID : %s\n"+
-                "Build ID  : %s\n"+
-                "Phase     : %s\n"+
-                "Test      : %s\n"+
-                "Timeout   : %s\n"+
-                "Command   : %s\n") % (deviceID, buildID, phase, testname, timeout, command))
-        testid=server("starttest", {"deviceid":deviceID, "testname":testname, "command":command})
-        status, stdout=perform(command, timeout)
-        server("endtest", {"deviceid":deviceID, "testid":testid, "status":status, "stdout":stdout})
-        if status: raise TestFail("'%s' exit status %d (%s line %d)" % (testname, status, script, line))
+        if ":" in l:
+            # name : timeout : command
+            t=l.split(':',2)
+            if len(t) != 3: raise ParseFail("expected at least 3 colons")
+            testname=" ".join(t[0].split())
+            if not testname: raise ParseFail("expected a test name")
+            try:
+                timeout=int(t[1].strip() or "60")
+                if (timeout <= 0): raise ValueError
+            except ValueError:
+                raise ParseFail("timeout is invalid")
+            command=" ".join(t[2].split())
+            if not command: raise ParseFail("expected a command string")
+            # catch too many ::'s
+            if command.startswith(":"): raise ParseFail("command can't start with colon")
+            operation.append({"op":"test", "testname":testname, "timeout":timeout, "command":command})
+        elif "{" in l:
+            # count {
+            t=l.split("{",1);
+            if t[1]: raise ParseFail("unexpected text after '{'")
+            try:
+                count=int(t[0].strip())
+            except ValueError:
+                raise ParseFail("loop count is invalid")
+            operation.append({"op":"push", "count":count})
+            pushed.append(len(operation))
+        elif l == "}":
+            if not pushed: raise ParseFail("'unexpected '}'");
+            operation.append({"op":"dbnz", "index":pushed.pop()});
+        else:
+            t=l.split();
+            if t[0] == "set" or t[0] == "clear":
+                if len(t) != 2 or not t[1] in flags: raise ParseFail("flag name is invalid")
+                operation.append({"op":t[0],"flag":t[1]});
+            else:
+                raise ParseFail("line is invalid")
+            
+    if pushed: raise ParseFail("Missing '}'")             
+    if not operation: raise ParseFail("Nothing to do!")
+    
+    # ok, now iterate the operation list
+    class TestFail(Exception): pass
+    pushed=[]   # pushed loop counters
+    index=0     # current operation index
+    failed=0    # remember failure when IgnoreFail is set
+    while index < len(operation):
+        op=operation[index]["op"]
+        if op == "test":
+            testname=operation[index]["testname"]
+            timeout=operation[index]["timeout"]
+            command=operation[index]["command"]
+            report("\n".join(language(test_in_progress)) +
+                   "\n\n" +
+                   "Device ID : %s\n" % deviceID +
+                   "Build ID  : %s\n" % buildID +
+                   "Phase     : %s\n" % phase +
+                   "Test      : %s\n" % testname +
+                   "Timeout   : %s\n" % timeout +
+                   "Command   : %s\n" % command )
+            testid=factory("starttest", {"deviceid":deviceID, "testname":testname, "command":command})
+            status, stdout=perform(command, timeout)
+            factory("endtest", {"deviceid":deviceID, "testid":testid, "status":status, "stdout":stdout})
+            if status:
+                if not flags["IgnoreFail"]: raise TestFail("'%s' exit status %d" % (testname, status))
+                flags["Failed"]=1 # else remember it for later
+        elif op == "push":
+            pushed.append(operation[index]["count"])
+        elif op == "dbnz":
+            pushed[-1] -= 1;
+            if pushed[-1]:
+                index=operation[index]["index"]-1 # will be incremented soon
+            else:
+                pushed.pop()
+        elif op == "set":
+            flags[operation[index]["flag"]]=True
+        elif op == "clear":    
+            flags[operation[index]["flag"]]=False
+        else:
+            raise Exception("shouldn't get here")
+        # advance to next operation
+        index+=1
 
-    server("enddiag", {"deviceid":deviceID})
-
-    badge("\n".join(language(test_passed))+"\n"+deviceID, bg="green")
+    # die on aggregate failure
+    if flags["Failed"]: raise TestFail("One or more tests failed") 
+    
+    # ok, we're done!
+    factory("enddiag", {"deviceid":deviceID})
+    report("\n".join(language(test_passed)) +
+           "\n\n" +
+           "Device ID : %s\n" % deviceID +
+           "Build ID  : %s\n" % buildID +
+           "Phase     : %s\n" % phase, bg="green");
 
 except:
     t,v,tb=sys.exc_info()
     traceback.print_exc()
     report("\n".join(language(test_failed))+"\n\n%s@%d: %s" % (t.__name__,tb.tb_lineno,str(v)), bg="red", fg="white")
     sys.exit(1)
-
