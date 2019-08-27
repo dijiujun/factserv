@@ -27,19 +27,23 @@ grant select, update, insert, delete, trigger on stations to factory;
 -- The build ID must be unique across all platforms
 create table builds (
     buildid varchar primary key,
-    provision boolean default false,
     phase1 int array,
     phase2 int array,
     phase3 int array,
     phase4 int array,
     comment varchar
 );
--- legacy
-alter table builds drop "filename";
 grant select, update, insert, delete, trigger on builds to factory;
+-- delete legacy
+alter table builds drop "filename";
+alter table builds drop "provision";
 
 -- test state, per device, installed by various process CGIs
-create type states as enum('TESTING','FAILED','PASSED','COMPLETE');
+create type states as enum('TESTING','FAILED','PASSED','COMPLETE','FAILING','UNKNOWN');
+-- add types to legacy installs
+alter type states add value 'FAILING';
+alter type states add value 'UNKNOWN';
+
 create table devices (
     deviceid varchar primary key,
     buildid varchar,

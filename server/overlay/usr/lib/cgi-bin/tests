@@ -1,48 +1,12 @@
 #!/usr/bin/python2
 
 import traceback, re, cgi, sys, psycopg2, os, base64
-from urllib import urlencode
+
+from util import escape, select, table, click, html, authenticate
+
+#authenticate("Technician","tech:techx4")
 
 class BadSubmit(Exception): pass
-
-# given a calar or list of strings, return them with html entites escaped
-def escape(ss):
-    if type(ss) in (tuple,): return tuple(escape(s) for s in ss)
-    else: return reduce(lambda s,t: s.replace(t[0],"&%s;"%t[1]),[str("" if ss is None else ss), ('&','amp'), ('<','lt'), ('>','gt'), ('"','quot'), ('\'','#39'), ('%','#37')])
-
-def select(name, options, selected):
-    s="<select name='%s'>" % escape(name)
-    for o in options:
-        if o is None: o = ""
-        s += "<option value='%s' %s>%s</option>" % (escape(o),"selected" if o == selected else "",escape(options[o]))
-    s += "</select>"
-    return s;
-
-def table(hclass, rows):
-    s = "<table>"
-    if hclass: s = "<table class='%s'>" % escape(hclass)
-    for row in rows:
-        s += "<tr>"
-        for r in row:
-            if r is None: r=""
-            s += "<td>"+r+"</td>"
-        s += "</tr>"
-    s += "</table>"
-    return s
-
-# return html string with escaped values inserted, redundant whitespace removed
-def html(string, values):
-    string = ' '.join(string.split())
-    if values is not None: string = string % tuple("" if s is None else escape(s) for s in values)
-    return string
-
-# require technician password
-try:
-    if base64.decodestring(os.environ["HTTP_AUTHORIZATION"].split()[1]) != "tech:techx4":
-        raise Exception
-except:
-    print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="Technician"\n'
-    sys.exit(0)
 
 try:
     conn=psycopg2.connect('dbname=factory')
@@ -51,31 +15,33 @@ try:
 
     drill=form.getvalue("drill")
     if drill:
-        cur.execute("select id, deviceid, started, ended, station, phase, testname, command, status, stdout from tests where id=%s",(drill,))
-        content=html(table("drill",[("ID","%s"),("Device ID","%s"),("Started","%s"),("Ended","%s"),("Station","%s"),("Phase","%s"), ("Test Name","%s"), ("Command","%s"), ("Status","%s"), ("Output","%s")]), cur.fetchone())
+        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, stdout from tests where id=%s",(drill,))
+        id, deviceid, started, ended, station, phase, testname, command, status,stdout=cur.fetchone()
+        content=table(("drill",[["ID",escape(id)],["Device ID",escape(deviceid)],["Started",escape(started)],["Ended",escape(ended)],["Station",escape(station)],
+                                ["Phase",escape(phase)],["Test Name",escape(testname)],["Command",escape(command)],["Status",status],["Output",escape(stdout, align=True)]]))
 
     else:
 
-        deviceid_types={"=":"is",       "!=":"is not",          "~":"matches",      "!~":"doesn't match"}
-        started_types= {"=":"is",       "!=":"is not",          "<":"is before",    ">":"is after"}
-        ended_types=   {"=":"is",       "!=":"is not",          "<":"is before",    ">":"is after"}
-        station_types= {"=":"is",       "!=":"is not"}
-        phase_types=   {"=":"is",       "!=":"is not"}
-        testname_types={"~":"matches",  "!~":"doesn't match"}
-        command_types= {"~":"matches",  "!~":"doesn't match"}
-        status_types=  {"=":"is",       "!=":"is not",          "<":"is less than", ">":"is greater than"}
-        stdout_types=  {"~":"matches",  "!~":"doesn't match"}
+        deviceid_types={"~":"contains",   "!~":"doesn't contain", "=":"is"}
+        started_types= {"<":"is before",  ">=":"is after"}
+        ended_types=   {"<":"is before",  ">=":"is after"}
+        station_types= {"=":"is",         "!=":"is not"}
+        phase_types=   {"=":"is",         "!=":"is not"}
+        testname_types={"~":"contains",   "!~":"doesn't contain"}
+        command_types= {"~":"contains",   "!~":"doesn't contain"}
+        status_types=  {"=":"is",         "!=":"is not"}
+        stdout_types=  {"~":"contains",   "!~":"doesn't contain"}
 
         # get possible test states
         cur.execute("select unnest(enum_range(NULL::states))")
         states=[r[0] for r in cur.fetchall()]
 
         deviceid=form.getvalue('deviceid')
-        deviceid_type=form.getvalue('deviceid_type') or "="
+        deviceid_type=form.getvalue('deviceid_type') or "~"
         started=form.getvalue('started')
-        started_type=form.getvalue('started_type') or "="
+        started_type=form.getvalue('started_type') or ">="
         ended=form.getvalue('ended')
-        ended_type=form.getvalue('ended_type') or "="
+        ended_type=form.getvalue('ended_type') or ">="
         station=form.getvalue('station')
         station_type=form.getvalue('station_type') or "="
         phase=form.getvalue('phase')
@@ -89,27 +55,14 @@ try:
         stdout=form.getvalue('stdout')
         stdout_type=form.getvalue('stdout_type') or "~"
 
-        content=html("<form method=get>" +
-                      table("query",
-                            [
-                                ("Device ID", select("deviceid_type",deviceid_types, deviceid_type),  "<input type=text name=deviceid value='%s'>"),
-                                ("Started",   select("started_type", started_types, started_type),    "<input type=text name=started value='%s'>"),
-                                ("Ended",     select("ended_type", ended_types, ended_type),          "<input type=text name=ended value='%s'>"),
-                                ("Station",   select("station_type", station_types, station_type),    "<input type=text name=station value='%s'>"),
-                                ("Phase",     select("phase_type", phase_types, phase_type),          "<input type=text name=phase value='%s'>"),
-                                ("Test Name", select("testname_type",testname_types, testname_type),  "<input type=text name=testname value='%s'>"),
-                                ("Command",   select("command_type",command_types, command_type),     "<input type=text name=command value='%s'>"),
-                                ("Status",    select("status_type",status_types, status_type),        "<input type=text name=status value='%s'>"),
-                                ("Stdout",    select("stdout_type",stdout_types, stdout_type),        "<input type=text name=stdout value='%s'>"),
-                            ]) +
-                      "<div><input type=submit value='Filter' style='float:left'></form><form><input type=submit value=Reset></form></div><hr>",
-                      (deviceid, started, ended, station, phase, testname, command, status, stdout))
+        sort=form.getvalue('sort') or 'desc';
+        limit=form.getvalue('limit') or "100";
 
         where=[]
 
         if deviceid:
             if deviceid_type not in deviceid_types: raise BadSubmit("Invalid deviceid_type %s" % deviceid_type)
-            where += [cur.mogrify("deviceid %s %%s" % deviceid_type, (deviceid,))]
+            where += [cur.mogrify("lower(deviceid) %s lower(%%s)" % deviceid_type, (deviceid,))]
 
         if started:
             if started_type not in started_types: raise BadSubmit("Invalid started_type %s" % started_type)
@@ -129,11 +82,11 @@ try:
 
         if testname:
             if testname_type not in testname_types: raise BadSubmit("Invalid testname_type %s" % testname_type)
-            where += [cur.mogrify("testname %s %%s" % testname_type, (testname,))]
+            where += [cur.mogrify("lower(testname) %s lower(%%s)" % testname_type, (testname,))]
 
         if command:
             if command_type not in command_types: raise BadSubmit("Invalid command_type %s" % command_type)
-            where += [cur.mogrify("command %s %%s" % command_type, (command,))]
+            where += [cur.mogrify("lower(command) %s lower(%%s)" % command_type, (command,))]
 
         if status:
             if status_type not in status_types: raise BadSubmit("Invalid status_type %s" % status_type)
@@ -141,55 +94,59 @@ try:
 
         if stdout:
             if stdout_type not in stdout_types: raise BadSubmit("Invalid stdout_type %s" % stdout_type)
-            where += [cur.mogrify("stdout %s %%s" % stdout_type, (stdout,))]
+            where += [cur.mogrify("lower(stdout) %s lower(%%s)" % stdout_type, (stdout,))]
 
-        cur.execute("select deviceid, started, ended, station, phase, substring(testname,1,50), substring(command,1,50), status, id, substring(split_part(stdout,E'\n',1),1,50) " +
+        content=("<form method=get>" +
+                    table(("form",
+                        [
+                            ["Device ID", select("deviceid_type", deviceid_types, deviceid_type),          "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
+                            ["Started",   select("started_type", started_types, started_type),             "<input type=text name=started value='%s'>" % escape(started)],
+                            ["Ended",     select("ended_type", ended_types, ended_type),                   "<input type=text name=ended value='%s'>" % escape(ended)],
+                            ["Station",   select("station_type", station_types, station_type),             "<input type=text name=station value='%s'>" % escape(station)],
+                            ["Phase",     select("phase_type", phase_types, phase_type),                   "<input type=text name=phase value='%s'>" % escape(phase)],
+                            ["Test Name", select("testname_type", testname_types, testname_type),          "<input type=text name=testname value='%s'>" % escape(testname)],
+                            ["Command",   select("command_type", command_types, command_type),             "<input type=text name=command value='%s'>" % escape(command)],
+                            ["Status",    select("status_type", status_types, status_type),                "<input type=text name=status value='%s'>" % escape(status)],
+                            ["Stdout",    select("stdout_type", stdout_types, stdout_type),                "<input type=text name=stdout value='%s'>" % escape(stdout)],
+                            ["Sort",      select("sort", {"asc":"ascending", "desc":"descending"}, sort),  "(sorted by occurance)"],
+                            ["Limit",     "<input type=text name=limit value='%s'>" % limit,               "&nbsp"],
+                        ])) +
+                      "<input type=submit value='Filter' style='float:left; vertical-align:text-bottom'>"+
+                 "</form>"+
+                 "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
+                 "<hr>")
+
+        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, substring(testname,1,50), substring(command,1,50), status, substring(split_part(stdout,E'\n',1),1,50) " +
                     "from tests " +
                     ("where " + " and ".join(where) if where else "") +
-                    " order by id desc limit 100")
+                    " order by id %s limit %s" % (sort, limit))
         if not cur.rowcount:
             content += "No match!"
+
         else:
             rows=cur.fetchall()
-            content += html(table("data",
-                           [("Device ID", "Started","Ended","Station","Phase","Test Name","Command", "Status", "Output")] +
-                           [("<a href='?deviceid=%s&deviceid_type=&#61;'>%s</a>",
-                             "%s", "%s", "%s", "%s", "%s", "%s", "%s",
-                           "<a href='?drill=%s'>%s</a>") for row in rows]),
-                     (r for row in rows for r in (row[0],)+row))
 
+            content += table(("data",
+                              [
+                                  ["Device ID", "Started","Ended","Station","Phase","Test Name","Command", "Status", "Output"]
+                              ] +
+                              [( (("fail" if row[8] else "pass") if row[3] else None) if not row[7] else None,
+                                  [click(row[1],"action=devices",{'deviceid':escape(row[1]),'deviceid_type':'='})] +
+                                  list(row[2:9]) +
+                                  [(("fail" if row[8] else "pass") if row[3] else None, click(row[9],None,{'drill':escape(row[0])}) if row[9] else "")]
+                               ) for row in rows
+                              ]
+                            ))
 
     # print generated content
-    print "Content-type: text/html\n\n" + html("""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <title>Test Status</title>
-    <style>
-        table td { padding-right: 10px; padding-left: 10px; padding-top: 4px; padding-bottom: 4px; font-family:monospace; vertical-align: top; }
-
-        table.form { margin: 20px }
-        table.form td:nth-child(1) { text-align: right; font-weight: bold; }
-
-        table.data { border-collapse: collapse; }
-        table.data td { border: solid 1px; }
-        table.data tr:nth-child(even) { background: #CCC; }
-        table.data tr:nth-child(1) { font-weight: bold; }
-
-        table.drill { border-collapse: collapse; }
-        table.drill td { border: solid 1px; }
-        table.drill td:nth-child(1) { font-weight: bold; }
-        table.drill td:nth-child(2) { white-space: pre; }
-        input { font-family:monospace }
-    </style>
-    </head>
-    <body>
-    <div>
-    <h2 style="float:left">Test Status</h2>
-    <form action="/"><input type="submit" value="Home" style="float:right; position:relative; top:15px"/></form>
-    </div>
-    <div style="clear:both"/>
-    """,None) + content + "</tt></body></html>"
+    print html("Test Status", 
+               """
+                table.drill { border-collapse: collapse; }
+                table.drill td { border: solid 1px; }
+                table.drill td:nth-child(1) { font-weight: bold; }
+                table.drill td:nth-child(2) { white-space: pre; }
+               """, 
+               content)
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

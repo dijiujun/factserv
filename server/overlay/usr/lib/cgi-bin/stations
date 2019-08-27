@@ -2,64 +2,13 @@
 
 import traceback, re, cgi, sys, psycopg2, subprocess, os, base64
 
-class BadSubmit(Exception): pass
+from util import escape, select, table, click, html, authenticate
 
-def escape(s):
-    xlat = {'&':'amp', '<':'lt', '>':'gt', '"':'quot', '\'':'#39', '%':'#37'}
-    s = str(s)
-    for x in xlat: s.replace(x,'&%s;'%xlat[x])
-    return s
-
-def select(name, options, selected):
-    s="<select name='%s'>" % escape(name)
-    for o in options:
-        s += "<option value='%s' %s>%s</option>" % (escape(o),"selected" if o == selected else "",escape(options[o]))
-    s += "</select>"
-    return s
-
-def table(hclass, rows):
-    s = "<table>"
-    if hclass: s = "<table class='%s'>" % (escape(hclass),)
-    for row in rows:
-        s += "<tr>"
-        for r in row: s += "<td>%s</td>" % (r,)
-        s += "</tr>"
-    s += "</table>"
-    return s
-
-# return html string with escaped values inserted, redundant whitespace removed
-def html(string, values):
-    if values is not None:
-        string = string % tuple("" if s is None else escape(s) for s in values)
-    return ' '.join(string.split())
-
-def makeform(values):
-    if not values:
-        values=("","","","","insert","Save")
-    else:
-        values+=("update %s" % escape(values[0]),"Update")
-    return html("<form method=post>"+table("form",[
-           ("Station ID",  "<input name=station type=text value='%s'>"),
-           ("Station MAC", "<input name=mac type=text value='%s'>"),
-           ("Fixture",     "<input name=fixture type=text value='%s'>"),
-           ("Comment",     "<input name=comment type=text value='%s'>")
-        ])+"""
-        <button name=action value='%s'>%s</button>
-        <button>Cancel</button>
-        </form>
-        """,values)
-
-# require supervisor password
-try:
-    if base64.decodestring(os.environ["HTTP_AUTHORIZATION"].split()[1]) != "supervisor:superx5":
-        raise Exception
-
-except:
-    print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="Supervisor"\n'
-    sys.exit(0)
+authenticate("Supervisor", "supervisor:superx5")
 
 try:
 
+    # update the dnsmasq dhcp configuration with current contents of stations database
     def dnsmasq():
         p = subprocess.Popen(["sudo","/etc/factory/update.dnsmasq"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         stdout = p.communicate()[0]
@@ -74,76 +23,91 @@ try:
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
     form=cgi.FieldStorage()
-    content=""
 
-    for _ in (True,):
-        if 'action' in form:
-            action = form.getvalue('action').split(' ')
-            if action[0] == 'new':
-                content = makeform(None)
-                break
-            elif action[0] == 'insert':
-                    cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)',
-                        (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment')))
-                    conn.commit()
-                    dnsmasq()
-            elif action[0] == 'del':
-                content = html(table(None,[("Really delete station %s?","<form method=post><button name=action value='really %s'>Yes</button></form>","<form method=post><button>No</button></form>")]), (action[1],action[1]))
-                break
-            elif action[0] == 'really':
-                    cur.execute('delete from stations where station=%s', (action[1],))
-                    conn.commit()
-                    dnsmasq()
-            elif action[0] == 'edit':
-                cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
-                content = makeform(cur.fetchone())
-                break
-            elif action[0] == 'update':
-                cur.execute('update stations set station=%s, mac=%s, fixture=%s, comment=%s where station=%s',
-                    (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment'),action[1]))
+    content=None
+
+    if 'action' in form:
+        action=[form.getvalue('action'), None]
+        if '=' in action[0]: action = form.getvalue('action').split('=',1)
+        if action[0] == 'none':
+            pass
+        elif action[0] == 'new':
+            content = ("<form method=get>"+
+                        table(("form",
+                        [
+                            [ "Station ID",  "<input name=station type=text>" ],
+                            [ "Station MAC", "<input name=mac     type=text>" ],
+                            [ "Fixture",     "<input name=fixture type=text>" ],
+                            [ "Comment",     "<input name=comment type=text>" ]
+                        ]))+
+                        "<button name=action value='insert'>Save</button>" +
+                        "<button name=action value=none>Cancel</button>" +
+                        "</form>")
+        elif action[0] == 'insert':
+                cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)',
+                    (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment')))
                 conn.commit()
                 dnsmasq()
-            else:
-                raise BadSubmit('Invalid action = "%s"' % action)
+        elif action[0] == 'del':
+            content = ("<form method=get>" +
+                       "Really delete station %s?&nbsp;" % action[1] +
+                       "<button name=action value='really=%s'>Yes</button>" % action[1] +
+                       "<button name=action value=none>No</button>"+
+                       "</form>" )
+        elif action[0] == 'really':
+                cur.execute('delete from stations where station=%s', (action[1],))
+                conn.commit()
+                dnsmasq() 
+        elif action[0] == 'edit':
+            cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
+            station, mac, fixture, comment = escape(cur.fetchone())
+            content = ("<form method=get"> +
+                        table(("form",
+                        [
+                            [ "Station ID",  "<input name=station type=text value='%s'>" % station ],
+                            [ "Station MAC", "<input name=mac     type=text value='%s'>" % mac ],
+                            [ "Fixture",     "<input name=fixture type=text value='%s'>" % fixture ],
+                            [ "Comment",     "<input name=comment type=text value='%s'>" % comment ]
+                        ]))+
+                        "<button name=action value='update'>Save"+
+                        "<button name=action value=none>Cancel</button>"+
+                        "</form>")
+        elif action[0] == 'update':
+            cur.execute('update stations set station=%s, mac=%s, fixture=%s, comment=%s where station=%s',
+                (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment'),action[1]))
+            conn.commit()
+            dnsmasq()
+        else:
+            raise Exception('Invalid action = "%s %s' % tuple(action))
 
+    if not content:
         cur.execute('select station,mac,fixture,comment from stations order by station')
-
         if not cur.rowcount:
             content = "No stations!"
         else:
             rows=cur.fetchall()
-            content = html(table("data",
-                [("Station","MAC","Fixture","Comment","&nbsp;")] +
-                [("%s",     "%s", "%s",     "%s",      html("<form method=post> <button name=action value='edit %s'>Edit</button> <button name=action value='del %s'>Del</button> </form>",(row[0],row[0]))) for row in rows]
-               ),tuple([r for row in rows for r in row]))
-
-        content += "<hr><form method=post><button name=action value=new>New station</button></form>"
+            content = (table(("data",
+                              [ 
+                                  ["Station","MAC","Fixture","Comment","&nbsp;"] 
+                              ] +
+                              [ ( escape(list(row)) + 
+                                  [ ("<form method=get>" +
+                                     "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) +
+                                     "<button name=action value='del=%s'>Delete</button>" % escape(row[0]) +
+                                     "</form>"
+                                    )
+                                  ]
+                                ) for row in rows
+                              ]
+                             )) +
+                       "<p><form method=get><button name=action value=new>New station</button></form>")
 
     # print generated content
-    print "Content-type: text/html; charset=utf-8\n\n<!DOCTYPE html>\n"+html("""
-    <html>
-    <head>
-    <title>Station Manager</title>
-    <style>
-        table td { padding-right: 10px; padding-left: 10px; padding-top: 4px; padding-bottom: 4px; }
-        table.form { margin: 20px }
-        table.form td.:nth-child(1) { text-align: right; font-weight: bold; }
-        table.data { border-collapse: collapse; }
-        table.data td { border: solid 1px; }
-        table.data tr:nth-child(even) { background: #CCC; }
-        table.data tr:nth-child(1) { font-weight: bold; }
-        input { font-family:monospace }
-    </style>
-    </head>
-    <body>
-    <div>
-    <h2 style="float:left">Station Manager</h2>
-    <form action="/"><input type="submit" value="Home" style="float:right; position:relative; top:15px"/></form>
-    </div>
-    <div style="clear:both"/>
-    """,None) + content + "</body></html>"
+    print html("Station Manager", 
+               "table.data tr:nth-child(even) { background: #CCC; }", 
+               content)
 
-except Exception as e:
+except:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
     print
     traceback.print_exc(file = sys.stdout)

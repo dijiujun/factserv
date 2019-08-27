@@ -24,8 +24,10 @@ Theory of operation:
 
     Otherwise the files in the tarball are extracted and the DUT invokes the
     dodiag.sh script contained therein. dodiag.sh can do whatever it wishes to
-    test the system, but typically it passes control to a dodiag executable which in
-    turn executes various tests that were included in the downloaded tarball.
+    test the system, but typically it passes control to the dodiag executable
+    which in turn executes various tests that were included in the downloaded
+    tarball. dodiag interacts with the factory server to track the device's
+    test state and store the test results.
 
     The server maintains a DHCP server which assigns static IPs to pre-defined
     MAC address of pionic controller or USB ethernet dongle. The last octet of
@@ -47,13 +49,18 @@ Theory of operation:
     access the internet for name resolution, NTP, etc.
 
 
-The 'server' directory contains everything necessary to configure the factory server. See the README in that directory.
+The 'server' directory contains everything necessary to configure the factory
+server. See the README in that directory.
 
 The 'client' directory contains example code that runs on DUT and interacts
 with server and CGIs.
 
-    startdiag.sh - this is code that is shipped with the production code and tries to detect factory environment during startup.
+    startdiag.sh - this is code that is shipped with the production code and
+    tries to detect factory environment during startup.
 
-    dodiag,sh - this goes in the diagnostic tarball, it is started by startdiag.sh after the tarball is downloaded. It prepares the DUT to perform diagnostics.
+    dodiag,sh - this goes in the diagnostic tarball, it is started by
+    startdiag.sh after the tarball is downloaded. It prepares the DUT to
+    perform diagnostics.
 
-    dodiag - this also goes in the diagnostics tarball, it invokes the various tests and interacts with the factory server.
+    dodiag - this also goes in the diagnostics tarball, it invokes the various
+    tests and interacts with the factory server.

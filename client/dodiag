@@ -4,14 +4,8 @@
 # This is the DUT test executive, runs on the target.
 import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signal
 
-buildID=None                    # must be specified on command line
-deviceID=None                   # can be specified, otherwise we'll try to discover it
-pionicIP="192.168.111.1"        # IP address of pionic controller-p
-script_path="."                 # Path to phaseX scripts
-
 # Things we say, in various lanuages
 test_in_progress=("Test in progress", "Pruebas en curso", "正在测试中" )
-scan_barcode    =("Scan barcode",     "Escanear código",  "扫描条形码" )
 test_passed     =("Test Passed",      "Prueba aprobada",  "通过测试"  )
 test_failed     =("Test Failed",      "Prueba fallida" ,  "测试失败"  )
 
@@ -21,17 +15,18 @@ def language(s): return [s[0],s[2]]
 
 # parse options
 try:
-    opts, args = getopt.getopt(sys.argv[1:],'p:t:')
+    opts, args = getopt.getopt(sys.argv[1:],'p:t:n')
 except:
     print """\
 Usage:
 
-    dodiags [options] buildID [deviceID]
+    dodiags [options] buildID deviceID
 
 Interact with factory server and perform diagnostics. Options are:
 
     -p ip.ad.re.ss    - pionic IP address, default is "192.168.111.1"
-    -t path           - path to "phaseX" test lists, default './' 
+    -t path           - path to downloaded test lists and executables, default is "./"
+    -n                - register deviceID as a new device, i.e. force phase 1 operation
 
 The caller must always provide the build ID.
 
@@ -44,14 +39,19 @@ storage where the caller can find it.
 """
     sys.exit(1)
 
-if len(args) < 1 or len(args) > 2: raise Exception("Build ID not specified")
+if len(args) != 2: raise Exception("Must specify buildID and deviceID")
 
-buildID=args[0]
-if len(args) > 1: deviceID=args[1]
+buildID=args[0]                 
+deviceID=args[1]
+
+pionicIP="192.168.111.1"        # IP address of pionic controller
+forcenew=False                  # if set, register as device as "newdevice"
+script_path="."                 # path to phaseX scripts
 
 for opt, arg in opts:
     if opt == '-p': pionicIP=arg
-    elif opt == '-t': scriptpath=arg.rstrip("/"); 
+    elif opt == '-t': script_path=arg.rstrip("/") 
+    elif opt == '-n': forcenew=True 
 
 class PionicFail(Exception): pass
 # Send a request to the pionic controller, return response 
@@ -85,7 +85,7 @@ def report(text, fg="white", bg="blue", size=30):
 class FactoryFail(Exception): pass
 def factory(service, options={}, debug=0):
     options["service"]=service
-    c=httplib.HTTPConnection(pionicIP,port=61080);
+    c=httplib.HTTPConnection(pionicIP,port=61080)
     c.set_debuglevel(debug)
     options=urllib.urlencode(options)
     if len(options)<512:
@@ -103,7 +103,8 @@ def factory(service, options={}, debug=0):
 def perform(command, timeout):
     print "Starting '%s' for max %d seconds..." % (command, timeout)
     # Support any shell command, let the shell be session leader so os.killpg can kill it and its children
-    p = subprocess.Popen(["/bin/sh","-c",command],stdout=subprocess.PIPE,stderr=subprocess.STDOUT, preexec_fn=os.setsid)
+    # Note we also add script_path to the PATH
+    p = subprocess.Popen(["/bin/sh","-c",command],stdout=subprocess.PIPE,stderr=subprocess.STDOUT, preexec_fn=os.setsid, env=dict(os.environ,PATH=script_path+os.pathsep+os.environ["PATH"]))
     t = threading.Timer(timeout, os.killpg, (p.pid, signal.SIGKILL))
     try:
         t.start()
@@ -128,33 +129,24 @@ try:
     badge("\n".join(language(test_in_progress)))
 
     print "Build ID is", buildID
+    print "Device ID is", deviceID    
     print "Pionic IP is", pionicIP 
 
-    if deviceID is None:
-        print "Provisioning deviceID"
-        factory("newdevice",{"buildid": buildID})
-        badge("\n".join(language(scan_barcode)), fg="black", bg="yellow")
-        deviceID=pionic("getbar?flush&timeout=3")
-        while not deviceID:
-           deviceID=pionic("getbar?timeout=3") # poll with shortish timeout
-        badge(None)
-	print "Got %s, updating server" % deviceID
+    if forcenew:
         factory("newdevice",{"deviceid":deviceID, "buildid": buildID})
-   
-    print "Device ID is", deviceID    
     
     # Pass info to test processes in the environment
     os.environ["PIONICIP"]=pionicIP
     os.environ["BUILDID"]=buildID
     os.environ["DEVICEID"]=deviceID 
 
-    phase=factory("startdiag",{"deviceid":deviceID, "buildid":buildID})
+    phase, sessionID = factory("startsession",{"deviceid":deviceID, "buildid":buildID}).split()[0:2]
 
     script="%s/phase%s" % (script_path, phase)
     print "Using test list %s" % script
 
     # flags that can be set or cleared by testlist
-    flags={"IgnoreFail":False, "Failed":False}
+    flags={"IgnoreFail":False}
 
     # Parse the test list file in a list of dicts.   
     # A dict may contain:
@@ -191,7 +183,7 @@ try:
             operation.append({"op":"test", "testname":testname, "timeout":timeout, "command":command})
         elif "{" in l:
             # count {
-            t=l.split("{",1);
+            t=l.split("{",1)
             if t[1]: raise ParseFail("unexpected text after '{'")
             try:
                 count=int(t[0].strip())
@@ -200,13 +192,13 @@ try:
             operation.append({"op":"push", "count":count})
             pushed.append(len(operation))
         elif l == "}":
-            if not pushed: raise ParseFail("'unexpected '}'");
-            operation.append({"op":"dbnz", "index":pushed.pop()});
+            if not pushed: raise ParseFail("'unexpected '}'")
+            operation.append({"op":"dbnz", "index":pushed.pop()})
         else:
-            t=l.split();
+            t=l.split()
             if t[0] == "set" or t[0] == "clear":
                 if len(t) != 2 or not t[1] in flags: raise ParseFail("flag name is invalid")
-                operation.append({"op":t[0],"flag":t[1]});
+                operation.append({"op":t[0],"flag":t[1]})
             else:
                 raise ParseFail("line is invalid")
             
@@ -217,7 +209,7 @@ try:
     class TestFail(Exception): pass
     pushed=[]   # pushed loop counters
     index=0     # current operation index
-    failed=0    # remember failure when IgnoreFail is set
+    failing=0   # remember failure when IgnoreFail is set
     while index < len(operation):
         op=operation[index]["op"]
         if op == "test":
@@ -231,17 +223,18 @@ try:
                    "Phase     : %s\n" % phase +
                    "Test      : %s\n" % testname +
                    "Timeout   : %s\n" % timeout +
-                   "Command   : %s\n" % command )
+                   "Command   : %s\n" % command,
+                   bg="purple" if failing else "blue")
             testid=factory("starttest", {"deviceid":deviceID, "testname":testname, "command":command})
             status, stdout=perform(command, timeout)
             factory("endtest", {"deviceid":deviceID, "testid":testid, "status":status, "stdout":stdout})
             if status:
-                if not flags["IgnoreFail"]: raise TestFail("'%s' exit status %d" % (testname, status))
-                flags["Failed"]=1 # else remember it for later
+                if not flags["IgnoreFail"]: break
+                failing=1
         elif op == "push":
             pushed.append(operation[index]["count"])
         elif op == "dbnz":
-            pushed[-1] -= 1;
+            pushed[-1] -= 1
             if pushed[-1]:
                 index=operation[index]["index"]-1 # will be incremented soon
             else:
@@ -255,16 +248,22 @@ try:
         # advance to next operation
         index+=1
 
-    # die on aggregate failure
-    if flags["Failed"]: raise TestFail("One or more tests failed") 
-    
-    # ok, we're done!
-    factory("enddiag", {"deviceid":deviceID})
-    report("\n".join(language(test_passed)) +
+    # we're done, end session!
+    state = factory("endsession", {"deviceid":deviceID, "sessionid":sessionID}).split()[0]
+
+    failed = (state != "PASSED" and state != "COMPLETE")
+
+    report("\n".join(language(test_failed if failed else test_passed)) +
            "\n\n" +
            "Device ID : %s\n" % deviceID +
            "Build ID  : %s\n" % buildID +
-           "Phase     : %s\n" % phase, bg="green");
+           "Phase     : %s\n" % phase +
+           ("\nALL TESTS COMPLETE!" if state == "COMPLETED" else ""),
+           bg="red" if failed else "green")
+    try:
+        sys.exit(failed)
+    except:
+        pass
 
 except:
     t,v,tb=sys.exc_info()

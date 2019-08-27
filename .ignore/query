@@ -1,0 +1,36 @@
+#!/usr/bin/python2
+
+# Return named status as json
+
+import traceback, sys, os, cgi, psycopg2, psycopg2.extras, json
+
+try:
+
+    def stringify(row):
+        for k in row.keys():
+            if not isinstance(row[k], (int,str)):
+                row[k] = str(row[k])
+        return row
+
+    result=""
+
+    conn=psycopg2.connect('dbname=factory')
+    cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    form=cgi.FieldStorage()
+
+    what=form.getvalue('what')
+    if what == 'now':
+        cur.execute("select uct() as now")
+        result=stringify(cur.fetchone())
+    
+    else:
+        raise Exception("Invalid status request '%s'" % what)    
+
+    print "Content-type: application/json\n\n" + json.dumps(result)
+
+except Exception:
+    print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
+    print
+    traceback.print_exc(file = sys.stdout)
+    print
+    for k in sorted(form.keys()): print k,"=",form.getvalue(k)

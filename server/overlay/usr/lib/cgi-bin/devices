@@ -3,175 +3,137 @@
 import traceback, re, cgi, sys, psycopg2, os, base64
 from urllib import urlencode
 
-class BadSubmit(Exception): pass
+from util import escape, select, table, click, html, authenticate
 
-def escape(s):
-    xlat = {'&':'amp', '<':'lt', '>':'gt', '"':'quot', '\'':'#39', '%':'#37'}
-    s = str(s)
-    for x in xlat: s.replace(x,'&%s;'%xlat[x])
-    return s
-
-def select(name, options, selected):
-    s="<select name='%s'>" % escape(name)
-    for o in options:
-        s += "<option value='%s' %s>%s</option>" % (escape(o),"selected" if o == selected else "",escape(options[o]))
-    s += "</select>"
-    return s;
-
-def table(hclass, rows):
-    s = "<table>"
-    if hclass: s = "<table class='%s'>" % (escape(hclass),)
-    for row in rows:
-        s += "<tr>"
-        for r in row: s += "<td>%s</td>" % (r,)
-        s += "</tr>"
-    s += "</table>"
-    return s
-
-# return html string with escaped values inserted, redundant whitespace removed
-def html(string, values):
-    if values is not None:
-        string = string % tuple("" if s is None else escape(s) for s in values)
-    return ' '.join(string.split())
-
-# require technician password
-try:
-    if base64.decodestring(os.environ["HTTP_AUTHORIZATION"].split()[1]) != "tech:techx4":
-        raise Exception
-except:
-    print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="Technician"\n'
-    sys.exit(0)
+#authenticate("Technician","tech:techx4")
 
 try:
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
-    form=cgi.FieldStorage();
+    form=cgi.FieldStorage()
+    content=""
 
-    deviceid_types={"=":"is","!=":"is not","like":"is like","not like":"is not like"}
-    buildid_types={"=":"is","!=":"is not","like":"is like","not like":"is not like"}
-    created_types={"=":"is","!=":"is not","<":"is before",">":"is after"}
-    updated_types={"=":"is","!=":"is not","<":"is before",">":"is after"}
-    state_types={"=":"is","!=":"is not"}
-    phase_types={"=":"is","!=":"is not"}
-    station_types={"=":"is","!=":"is not"}
-    # get possible test states
-    cur.execute("select unnest(enum_range(NULL::states))")
-    states=[r[0] for r in cur.fetchall()]
+    if "action" in form:
+        action=[form.getvalue('action'), None]
+        if '=' in action[0]: action = form.getvalue('action').split('=',1)
+        if action[0] == 'none':
+            pass
+        elif action[0] == 'reset':
+            content=("<form method=get>"+
+                         "Really reset the test state for <b>%s</b>?&nbsp;" % escape(action[1]) +
+                         "<button name=action value='yes=%s'>Yes</button>" % action[1] +
+                         "<button name=action value=none>No</button>" +
+                     "</form>")
+        elif action[0]=='yes':
+            cur.execute("update devices set phase=1, state='UNKNOWN' where deviceid=%s and state != 'COMPLETE'", (action[1],))
+            conn.commit()
 
+        else:
+             raise Exception("Invalid action = %s %s" % tuple(action))
 
-    if form.getvalue("deed") != "Reset":
+    if not content:
+        # no action, or action did not generate content
+        deviceid_types={"~":"contains",     "!~":"doesn't contain", "=":"is"}
+        buildid_types= {"~":"contains",     "!~":"doesn't contain"}
+        created_types= {"<":"is before",    ">=":"is after"}
+        updated_types= {"<":"is before",    ">=":"is after"}
+        state_types=   {"=":"is",           "!=":"is not"}
+        phase_types=   {"=":"is",           "!=":"is not"}
+        station_types= {"=":"is",           "!=":"is not"}
+        # get possible test states
+        cur.execute("select unnest(enum_range(NULL::states))")
+        states=[r[0] for r in cur.fetchall()]
 
         deviceid=form.getvalue('deviceid')
-        deviceid_type=form.getvalue('deviceid_type')
+        deviceid_type=form.getvalue('deviceid_type') or '~'
         buildid=form.getvalue('buildid')
-        buildid_type=form.getvalue('buildid_type')
+        buildid_type=form.getvalue('buildid_type') or '~'
         created=form.getvalue('created')
-        created_type=form.getvalue('created_type')
+        created_type=form.getvalue('created_type') or '>='
         updated=form.getvalue('updated')
-        updated_type=form.getvalue('updated_type')
+        updated_type=form.getvalue('updated_type') or '>='
         state=form.getvalue('state')
-        state_type=form.getvalue('state_type')
+        state_type=form.getvalue('state_type') or '='
         phase=form.getvalue('phase')
-        phase_type=form.getvalue('phase_type')
+        phase_type=form.getvalue('phase_type') or '='
         station=form.getvalue('station')
-        station_type=form.getvalue('station_type')
+        station_type=form.getvalue('station_type') or '='
+        sort=form.getvalue('sort') or 'desc';
+        limit=form.getvalue('limit') or "100";
 
-    else:
+        if state:
+            state=state.upper()
+            if state not in states: raise Exception("Invalid state %s" % state)
 
-        deviceid=None
-        deviceid_type=None
-        buildid=None
-        buildid_type=None
-        created=None
-        created_type=None
-        updated=None
-        updated_type=None
-        state=None
-        state_type=None
-        phase=None
-        phase_type=None
-        station=None
-        station_type=None
+        where=[]
 
+        if deviceid:
+            if deviceid_type not in deviceid_types: raise Exception("Invalid deviceid_type %s" % (deviceid_type,))
+            where += [cur.mogrify("lower(deviceid) %s lower(%%s)" % (deviceid_type,) ,(deviceid,))]
 
-    if state:
-        state=state.upper()
-        if state not in states: raise BadSubmit("Invalid state %s" % state)
+        if buildid:
+            if buildid_type not in buildid_types: raise Exception("Invalid buildid_type %s" % (buildid_type,))
+            where += [cur.mogrify("lower(buildid) %s lower(%%s)" % (buildid_type,) ,(buildid,))]
 
-    content="<form method=post>" + table("form",
-    [
-        ["Device ID", select("deviceid_type",deviceid_types, deviceid_type or "="),  html("<input type=text name=deviceid value='%s'>",(deviceid,))],
-        ["Build ID",  select("buildid_type", buildid_types, buildid_type or "="),    html("<input type=text name=buildid value='%s'>",(buildid,))],
-        ["Created",   select("created_type", created_types, created_type or "="),    html("<input type=text name=created value='%s'>",(created,))],
-        ["Updated",   select("updated_type", updated_types, updated_type or "="),    html("<input type=text name=updated value='%s'>",(updated,))],
-        ["State",     select("state_type", state_types, state_type or "="),          select("state",{a:a for a in [""]+states}, state)],
-        ["Phase",     select("phase_type", phase_types, phase_type or "="),          html("<input type=text name=phase value='%s'>",(phase,))],
-        ["Station",   select("station_type", station_types, station_type or "="),    html("<input type=text name=station value='%s'>",(station,))]
-    ])+"<input type=submit name=deed value=Submit><input type=submit name=deed value=Reset></form><hr>"
+        if created:
+            if created_type not in created_types: raise Exception("Invalid created_type %s" % (created_type,))
+            where += [cur.mogrify("created %s %%s" % (created_type,) ,(created,))]
 
-    where=[]
+        if updated:
+            if updated_type not in updated_types: raise Exception("Invalid updated_type %s" % (updated_type,))
+            where += [cur.mogrify("updated %s %%s" % (updated_type,) ,(updated,))]
 
-    if deviceid:
-        if deviceid_type not in deviceid_types: raise BadSubmit("Invalid deviceid_type %s" % (deviceid_type,))
-        where += [cur.mogrify("deviceid %s %%s" % (deviceid_type,) ,(deviceid,))]
+        if state:
+            if state_type not in state_types: raise Exception("Invalid state_type %s" % (state_type,))
+            where += [cur.mogrify("state %s %%s" % (state_type,) ,(state,))]
 
-    if buildid:
-        if buildid_type not in buildid_types: raise BadSubmit("Invalid buildid_type %s" % (buildid_type,))
-        where += [cur.mogrify("buildid %s %%s" % (buildid_type,) ,(buildid,))]
+        if phase:
+            if phase_type not in phase_types: raise Exception("Invalid phase_type %s" % (phase_type,))
+            where += [cur.mogrify("phase %s %%s" % (phase_type,) ,(phase,))]
 
-    if created:
-        if created_type not in created_types: raise BadSubmit("Invalid created_type %s" % (created_type,))
-        where += [cur.mogrify("created %s %%s" % (created_type,) ,(created,))]
+        if station:
+            if station_type not in station_types: raise Exception("Invalid station_type %s" % (station_type,))
+            where += [cur.mogrify("station %s %%s" % (station_type,) ,(station,))]
 
-    if updated:
-        if updated_type not in updated_types: raise BadSubmit("Invalid updated_type %s" % (updated_type,))
-        where += [cur.mogrify("updated %s %%s" % (updated_type,) ,(updated,))]
-
-    if state:
-        if state_type not in state_types: raise BadSubmit("Invalid state_type %s" % (state_type,))
-        where += [cur.mogrify("state %s %%s" % (state_type,) ,(state,))]
-
-    if phase:
-        if phase_type not in phase_types: raise BadSubmit("Invalid phase_type %s" % (phase_type,))
-        where += [cur.mogrify("phase %s %%s" % (phase_type,) ,(phase,))]
-
-    if station:
-        if station_type not in station_types: raise BadSubmit("Invalid station_type %s" % (station_type,))
-        where += [cur.mogrify("station %s %%s" % (station_type,) ,(station,))]
-
-    cur.execute("select deviceid, buildid, created, updated, state, phase, station from devices "+("where " + " and ".join(where) if where else "")+" order by updated desc limit 100")
-    if not cur.rowcount:
-        content += "No match!"
-    else:
-        #content += table("data", [["Device ID","Build ID","Created","Updated","State","Phase","Station"]] + [row for row in cur])
-        content += table("data", [("Device ID","Build ID","Created","Updated","State","Phase","Station")] +
-                                 [ ("<a href=tests?%s>%s</a>" % (urlencode({"deviceid":row[0],"deviceid_type":"="}), escape(row[0])) , )+row[1:] for row in cur ]);
+        content=("<form method=get>" +
+                     table(("form",
+                              [
+                                  ["Device ID", select("deviceid_type",deviceid_types, deviceid_type or "="),   "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
+                                  ["Build ID",  select("buildid_type", buildid_types, buildid_type or "="),     "<input type=text name=buildid value='%s'>" % escape(buildid)],
+                                  ["Created",   select("created_type", created_types, created_type or "="),     "<input type=text name=created value='%s'>" % escape(created)],
+                                  ["Updated",   select("updated_type", updated_types, updated_type or "="),     "<input type=text name=updated value='%s'>" % escape(updated)],
+                                  ["State",     select("state_type", state_types, state_type or "="),           select("state",{a:a for a in [""]+states}, state)],
+                                  ["Phase",     select("phase_type", phase_types, phase_type or "="),           "<input type=text name=phase value='%s'>" % escape(phase)],
+                                  ["Station",   select("station_type", station_types, station_type or "="),     "<input type=text name=station value='%s'>" % escape(station)],
+                                  ["Sort",      select("sort", {"asc":"ascending", "desc":"descending"}, sort), "(note, sorts on 'Updated')"],
+                                  ["Limit",     "<input type=text name=limit value='%s'>" % escape(limit),      "&nbsp"],
+                              ]
+                          ))+
+                     "<input style='float:left; vertical-align:text-bottom' type=submit value=Filter></form>"+
+                     "<form method=get><input style='vertical-align:text-bottom' type=submit value=Reset>"+
+                 "</form>"+
+                 "<hr>")
+        cur.execute("select deviceid, buildid, date_trunc('seconds',created), date_trunc('seconds',updated), state, phase, station from devices "+("where " + " and ".join(where) if where else "")+" order by updated %s limit %s"%(sort,limit))
+        if not cur.rowcount:
+            content += "No match!"
+        else:
+            rows=cur.fetchall()
+            content += table(("data",
+                             [
+                                 ["Device ID","Build ID","Created","Updated","State","Phase","Station"]
+                             ] +
+                             [("pass" if row[4] == 'PASSED' or row[4] == 'COMPLETE' else "fail" if row[4] == 'FAILED' or row[4] == 'FAILING' else None,
+                                 [click(row[0],"action=tests", {"deviceid":row[0],"deviceid_type":"="})]+
+                                 escape(list(row[1:4])) +
+                                 [click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4])] +
+                                 escape(list(row[5:]))
+                              ) for row in rows
+                             ]
+                           ))
 
     # print generated content
-    print "Content-type: text/html\n\n" + html("""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <title>Device Status</title>
-    <style>
-        table td { padding-right: 10px; padding-left: 10px; padding-top: 4px; padding-bottom: 4px; }
-        table.form { margin: 20px }
-        table.form td.:nth-child(1) { text-align: right; font-weight: bold; }
-        table.data { border-collapse: collapse; }
-        table.data td { border: solid 1px; }
-        table.data tr:nth-child(even) { background: #CCC; }
-        table.data tr:nth-child(1) { font-weight: bold; }
-        input { font-family:monospace }
-    </style>
-    </head>
-    <body>
-    <div>
-    <h2 style="float:left">Device Status</h2>
-    <form action="/"><input type="submit" value="Home" style="float:right; position:relative; top:15px"/></form>
-    </div>
-    <div style="clear:both"/>
-    """,None) + content + "</tt></body></html>"
+    print html("Device Status", None, content)
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"
