@@ -1,7 +1,8 @@
 # Phase1 test list example
 #
 # Comments and whitespace are ignored.
-# One test per line, in the format:
+#
+# A single test is defined with the format:
 #
 #       name : timeout : command
 #
@@ -9,13 +10,32 @@
 #       'name' is any arbitrary string used to identify the test, may not contain ":"
 #       'seconds' is command timeout, must be > 0, but if blank the default is 60 seconds
 #       'command' is a command to be executed by /bin/sh
+#
+# Loop blocks are defined as:
+#
+#    	count {
+# 		name : timeout : commannd
+#       	...
+#    	}
+#
+# The tests in the block will be repeated 'count' time.
+#
+# Normally, testing stops at the first failure. This can be prevented with:
+#
+#	set IgnoreFail
+#
+# If a test fails it will be indicated as a failure but testing will continue.
+# However the testing cannot proceed to the next phase.
+#
+# The tests here don't do anything interesting, they are just for
+# demonstration and to fill the test log with stuff.
 
-# Phase1 must always permanently store the device ID somewhere platform-specific.
-# For this example, we'll just write it to home directory.
-Store DeviceID      :: case "$DEVICEID" in BYT*) echo $DEVICEID > ~/deviceid.txt;; *) echo "DeviceID '$DEVICEID' is invalid"; exit 1;; esac 
+Show the environment :: sleep 1; set
 
-Some kind of test   :: set && sleep 1
+Show the process list :: sleep 1; ps auxf
 
-Another test        :: ps auxf && sleep 1
+Show the CWD :: sleep 1; ls -al
 
-Yet another test    :: ls -al && sleep 1
+4 {
+    Loop test :: sleep 1; echo Nothing to see here, carry on.
+}		

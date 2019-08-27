@@ -24,10 +24,10 @@ pionicIP=$1 buildID=$2
 # use that as the basis of our device ID. Don't use a file in production code!
 deviceID=$(cat /tmp/deviceid 2>/dev/null) || true
 case "$deviceID" in
-    TEST-??????*) 
+    TEST-??????*)
         # TEST- and at least 6 characters, looks good!
         newdevice="" # not a new device
-        ;; 
+        ;;
     *)
         barcode=$(./getbar $pionicIP $buildID) || die "Failed to read barcode"
         [ ${#barcode} -eq 6 ] || die "Barcode '$barcode' is too short"
@@ -35,7 +35,7 @@ case "$deviceID" in
         echo "$deviceID" > /tmp/deviceid
         newdevice="-n" # tell dodiag to register a new deviceID, forces phase 1 operation
         ;;
-esac    
+esac
 
 # Now invoke dodiag to talk to the server and run the tests
 ./dodiag $newdevice -p$pionicIP $buildID $deviceID

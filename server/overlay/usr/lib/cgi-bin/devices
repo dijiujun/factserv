@@ -123,10 +123,13 @@ try:
                              [
                                  ["Device ID","Build ID","Created","Updated","State","Phase","Station"]
                              ] +
-                             [("pass" if row[4] == 'PASSED' or row[4] == 'COMPLETE' else "fail" if row[4] == 'FAILED' or row[4] == 'FAILING' else None,
+                             [("pass" if row[4] == 'COMPLETE' else None,
                                  [click(row[0],"action=tests", {"deviceid":row[0],"deviceid_type":"="})]+
                                  escape(list(row[1:4])) +
-                                 [click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4])] +
+                                 [
+                                   ("pass" if row[4] == 'PASSED' else "fail" if row[4] =='FAILED' or row[4] == 'FAILING' else None,  
+                                   click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4]))
+                                 ] +
                                  escape(list(row[5:]))
                               ) for row in rows
                              ]

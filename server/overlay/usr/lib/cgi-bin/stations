@@ -61,16 +61,16 @@ try:
         elif action[0] == 'edit':
             cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
             station, mac, fixture, comment = escape(cur.fetchone())
-            content = ("<form method=get"> +
+            content = ("<form method=get>" +
                         table(("form",
                         [
                             [ "Station ID",  "<input name=station type=text value='%s'>" % station ],
                             [ "Station MAC", "<input name=mac     type=text value='%s'>" % mac ],
                             [ "Fixture",     "<input name=fixture type=text value='%s'>" % fixture ],
                             [ "Comment",     "<input name=comment type=text value='%s'>" % comment ]
-                        ]))+
-                        "<button name=action value='update'>Save"+
-                        "<button name=action value=none>Cancel</button>"+
+                        ])) +
+                        "<button name=action value='update=%s'>Save</button>" % station +
+                        "<button name=action value='none'>Cancel</button>" +
                         "</form>")
         elif action[0] == 'update':
             cur.execute('update stations set station=%s, mac=%s, fixture=%s, comment=%s where station=%s',

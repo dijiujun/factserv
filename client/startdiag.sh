@@ -69,23 +69,26 @@ case "$method" in
         ip link set $interface up || true
         ip address add $address dev $interface || true
         ;;
-    
-    http)        
+
+    http)
         # We expect that $pionic is on the local subnet and forwards port 61080
         # to the server http, and 61433 to the server https. Perform a server
         # test connect, if it doesn't work then assume we're not in the factory
         # and just exit.
-        $curl -m 2 "http://$pionic:61080/factory?service=test" &>/dev/null || exit 0
+        $curl -m 2 "http://$pionic:61080/cgi-bin/factory?service=fixture" &>/dev/null || exit 0
         ;;
-    
+
     *)
         die "Invalid method $method"
         ;;
-esac        
+esac
 
 # If we're here, then we're in the factory. Make sure the only way out is with
 # a reboot.
 trap 'while true; do echo "Reboot now"; sleep 5; done' EXIT
+
+# Tell operator
+printf "Starting\nComenzando\n开始" |  $curl --data-binary @- "http://$pionic/display?text&badge"
 
 # XXX set the build ID. The build ID must uniquely identify the software build
 # and the DUT device type. Note the server associates the build ID with a

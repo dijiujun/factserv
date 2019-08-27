@@ -5,13 +5,9 @@
 import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signal
 
 # Things we say, in various lanuages
-test_in_progress=("Test in progress", "Pruebas en curso", "正在测试中" )
-test_passed     =("Test Passed",      "Prueba aprobada",  "通过测试"  )
-test_failed     =("Test Failed",      "Prueba fallida" ,  "测试失败"  )
-
-# Given one of the strings above, return array of languages of interest
-# In this case, English and Chinese
-def language(s): return [s[0],s[2]]
+test_in_progress='\n'.join(["Test in progress", "Pruebas en curso", "正在测试中"])
+test_passed     ='\n'.join(["Test Passed",      "Prueba aprobada",  "通过测试"])
+test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失败"])
 
 # parse options
 try:
@@ -32,7 +28,7 @@ The caller must always provide the build ID.
 
 The caller also provides the device ID if programmed. If not given, dodiag will
 attempt to read it from the nominal device ID file, and if that fails it will
-scan the PCB barcode and use that as the device ID. 
+scan the PCB barcode and use that as the device ID.
 
 A phase 1 diagnostic must program DEVICEID from the environment into long term
 storage where the caller can find it.
@@ -41,7 +37,7 @@ storage where the caller can find it.
 
 if len(args) != 2: raise Exception("Must specify buildID and deviceID")
 
-buildID=args[0]                 
+buildID=args[0]
 deviceID=args[1]
 
 pionicIP="192.168.111.1"        # IP address of pionic controller
@@ -50,11 +46,11 @@ script_path="."                 # path to phaseX scripts
 
 for opt, arg in opts:
     if opt == '-p': pionicIP=arg
-    elif opt == '-t': script_path=arg.rstrip("/") 
-    elif opt == '-n': forcenew=True 
+    elif opt == '-t': script_path=arg.rstrip("/")
+    elif opt == '-n': forcenew=True
 
 class PionicFail(Exception): pass
-# Send a request to the pionic controller, return response 
+# Send a request to the pionic controller, return response
 # If data is provided, it is will sent as raw POST content
 def pionic(request, data=None, debug=0):
     c=httplib.HTTPConnection(pionicIP)
@@ -66,7 +62,7 @@ def pionic(request, data=None, debug=0):
     r=c.getresponse()
     if r.status != 200:
         raise PionicFail("%s in service %s" % (r.reason, request))
-    return r.read().strip()    
+    return r.read().strip()
 
 # display message in center or top-left of screen
 def badge(text, fg="white", bg="blue", size=90):
@@ -96,7 +92,7 @@ def factory(service, options={}, debug=0):
     r=c.getresponse()
     if r.status != 200:
         raise FactoryFail("Service %s failed with '%s'" % (service, r.reason))
-    return r.read().strip()    
+    return r.read().strip()
 
 # perform an arbitrary shell command with timeout, return exit status and
 # command's stdout/stderr
@@ -114,31 +110,31 @@ def perform(command, timeout):
         t.cancel()
     p.stdout.close()
     stdout=stdout.strip()
-    if not stdout: stdout="NO OUTPUT\n"  
+    if not stdout: stdout="NO OUTPUT\n"
     status=p.returncode
     if expired:
         stdout+="\nTIMEOUT\n"
         if not status: status=-99
     print "Status:",status
-    print "Stdout:"    
+    print "Stdout:"
     for l in stdout.splitlines(): print "  ",l
     return (status, stdout)
 
 # This is the main test loop
 try:
-    badge("\n".join(language(test_in_progress)))
+    report(test_in_progress)
 
     print "Build ID is", buildID
-    print "Device ID is", deviceID    
-    print "Pionic IP is", pionicIP 
+    print "Device ID is", deviceID
+    print "Pionic IP is", pionicIP
 
     if forcenew:
         factory("newdevice",{"deviceid":deviceID, "buildid": buildID})
-    
+
     # Pass info to test processes in the environment
     os.environ["PIONICIP"]=pionicIP
     os.environ["BUILDID"]=buildID
-    os.environ["DEVICEID"]=deviceID 
+    os.environ["DEVICEID"]=deviceID
 
     phase, sessionID = factory("startsession",{"deviceid":deviceID, "buildid":buildID}).split()[0:2]
 
@@ -148,17 +144,17 @@ try:
     # flags that can be set or cleared by testlist
     flags={"IgnoreFail":False}
 
-    # Parse the test list file in a list of dicts.   
+    # Parse the test list file in a list of dicts.
     # A dict may contain:
     #   {"op":"test", "testname":"s", "timeout":N, "command":"s"}   - execute command with timeout
-    #   {"op":"push", "count":N}                                    - push a new loop count
-    #   {"op":"dbnz", "index",I}                                    - decrement the loop count, if zero pop the loop count and continue. Else branch to specified index.
+    #   {"op":"push", "count":N}                                    - push a new loop counter as (0, count)
+    #   {"op":"next", "index":I}                                    - increment the top loop counter, if at max pop the counter and continue. Else branch to specified index.
     #   {"op":"set", "flag":"name"}                                 - set named flag
     #   {"op":"clear", "flag":"name"}                               - clear named flag
     operation=[]
     pushed=[]
     line=0
-    class ParseFail(Exception): 
+    class ParseFail(Exception):
         def __init__(self, args):
             Exception.__init__("%s line %d - %s" % (script, line, format(args)))
     for l in open(script):
@@ -193,7 +189,7 @@ try:
             pushed.append(len(operation))
         elif l == "}":
             if not pushed: raise ParseFail("'unexpected '}'")
-            operation.append({"op":"dbnz", "index":pushed.pop()})
+            operation.append({"op":"next", "index":pushed.pop()})
         else:
             t=l.split()
             if t[0] == "set" or t[0] == "clear":
@@ -201,10 +197,10 @@ try:
                 operation.append({"op":t[0],"flag":t[1]})
             else:
                 raise ParseFail("line is invalid")
-            
-    if pushed: raise ParseFail("Missing '}'")             
+
+    if pushed: raise ParseFail("Missing '}'")
     if not operation: raise ParseFail("Nothing to do!")
-    
+
     # ok, now iterate the operation list
     class TestFail(Exception): pass
     pushed=[]   # pushed loop counters
@@ -216,14 +212,13 @@ try:
             testname=operation[index]["testname"]
             timeout=operation[index]["timeout"]
             command=operation[index]["command"]
-            report("\n".join(language(test_in_progress)) +
+            report(test_in_progress +
                    "\n\n" +
                    "Device ID : %s\n" % deviceID +
                    "Build ID  : %s\n" % buildID +
                    "Phase     : %s\n" % phase +
                    "Test      : %s\n" % testname +
-                   "Timeout   : %s\n" % timeout +
-                   "Command   : %s\n" % command,
+               ("Loop      : %d/%d" % tuple(pushed[-1]) if len(pushed) else ""),
                    bg="purple" if failing else "blue")
             testid=factory("starttest", {"deviceid":deviceID, "testname":testname, "command":command})
             status, stdout=perform(command, timeout)
@@ -232,17 +227,19 @@ try:
                 if not flags["IgnoreFail"]: break
                 failing=1
         elif op == "push":
-            pushed.append(operation[index]["count"])
-        elif op == "dbnz":
-            pushed[-1] -= 1
-            if pushed[-1]:
-                index=operation[index]["index"]-1 # will be incremented soon
+            pushed.append([1,operation[index]["count"]]) # list of [current, max]
+        elif op == "next":
+            pushed[-1][0]+=1                             # increment pushed current
+            if pushed[-1][0] <= pushed[-1][1]:           # if current <= max
+                index=operation[index]["index"]-1        # set new index, will be incremented soon
             else:
                 pushed.pop()
         elif op == "set":
             flags[operation[index]["flag"]]=True
-        elif op == "clear":    
-            flags[operation[index]["flag"]]=False
+        elif op == "clear":
+            flag=operation[index]["flag"]
+            flags[flag]=False
+            if flag=="IgnoreFail" and failing: break # die on deferred failure
         else:
             raise Exception("shouldn't get here")
         # advance to next operation
@@ -253,13 +250,23 @@ try:
 
     failed = (state != "PASSED" and state != "COMPLETE")
 
-    report("\n".join(language(test_failed if failed else test_passed)) +
-           "\n\n" +
-           "Device ID : %s\n" % deviceID +
-           "Build ID  : %s\n" % buildID +
-           "Phase     : %s\n" % phase +
-           ("\nALL TESTS COMPLETE!" if state == "COMPLETED" else ""),
-           bg="red" if failed else "green")
+    if failed:
+        report(test_failed +
+               "\n\n" +
+               "Device ID : %s\n" % deviceID +
+               "Build ID  : %s\n" % buildID +
+               "Phase     : %s\n" % phase +
+                "Test      : %s\n" % testname +
+                ("Loop      : %d/%d" % tuple(pushed[-1]) if len(pushed) else "") ,
+                bg="red")
+    else:
+        report(test_passed +
+               "\n\n" +
+               "Device ID : %s\n" % deviceID +
+               "Build ID  : %s\n" % buildID +
+               "Phase     : %s\n" % phase +
+               ("\nALL TESTS COMPLETE!" if state == "COMPLETE" else ""),
+               bg="green")
     try:
         sys.exit(failed)
     except:
@@ -268,5 +275,5 @@ try:
 except:
     t,v,tb=sys.exc_info()
     traceback.print_exc()
-    report("\n".join(language(test_failed))+"\n\n%s@%d: %s" % (t.__name__,tb.tb_lineno,str(v)), bg="red", fg="white")
+    report(test_failed+"\n\n%s@%d: %s" % (t.__name__,tb.tb_lineno,str(v)), bg="red", fg="white")
     sys.exit(1)
