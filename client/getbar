@@ -15,6 +15,9 @@ import traceback, os, sys, httplib, urllib
 #
 # In the event of error, written to stderr, paints the screen red and exits 1
 
+def badge(fg, bg, text):
+    return http(pionic, "display", options={"text":None, "badge":None, "size":70, "fg":fg, "bg":bg }, data=text)
+
 try:
     pionic = sys.argv[1]
     buildid = sys.argv[2]
@@ -53,7 +56,7 @@ try:
     err, out = http(factory, "cgi-bin/factory", options={"service":"newdevice", "buildid":buildid});
     if err: raise Exception("\"newdevice\" request returned \"%s\"" % out);
 
-    err, out = http(pionic, "display", options={"text":None, "badge":None, "size":70, "fg":"black", "bg":"yellow" }, data="Scan barcode\nEscanear código\n扫描条形码")
+    err, out = badge("black", "yellow", "Scan barcode\nEscanear código\n扫描条形码")
     if err: raise Exception("\"display\" request returned \"%s\"" % out)
 
     err, out = http(pionic, "getbar", options={"flush":None, "timeout":3})
@@ -62,7 +65,7 @@ try:
     if err: raise Exception("\"getbar\" request returned \"%s\"" % out)
     barcode=out
 
-    err, out = http(pionic, "display", options={"clear":None, "bg":"blue"}, data"Scan OK\nEscanear OK\n扫描确定")
+    badge("white", "blue", "Scan OK\nEscanear OK\n扫描确定")
     if err: raise Exception("pionic \"display\" returned \"%s\"" % out)
 
     print(barcode)
@@ -70,7 +73,7 @@ try:
 except:
     t,v,tb=sys.exc_info()
     try:
-        http(pionic, "display", options={"clear":None, "bg":"red"}, data="Scan failed\nEscanear fallido\n扫描失败")
+        badge("white", "red", "Scan failed\nEscanear fallido\n扫描失败")
     except:
         pass
     print ("Error line %d - %s" % (tb.tb_lineno, str(v)), file=sys.stderr)
