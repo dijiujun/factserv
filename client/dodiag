@@ -2,9 +2,9 @@
 # DO NOT REMOVE THIS LINE - coding: utf-8
 
 # This is the DUT test executive, runs on the target.
-import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signal
+import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signal, time
 
-# Things we say, in various lanuages
+# Test status messages, in various lanuages
 test_in_progress='\n'.join(["Test in progress", "Pruebas en curso", "正在测试中"])
 test_passed     ='\n'.join(["Test Passed",      "Prueba aprobada",  "通过测试"])
 test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失败"])
@@ -12,6 +12,19 @@ test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失�
 # parse options
 try:
     opts, args = getopt.getopt(sys.argv[1:],'p:t:n')
+
+    buildID=args[0]
+    deviceID=args[1]
+
+    pionicIP="192.168.111.1"        # IP address of pionic controller
+    forcenew=False                  # if set, register as device as "newdevice"
+    script_path="."                 # path to phaseX scripts
+
+    for opt, arg in opts:
+        if opt == '-p': pionicIP=arg
+        elif opt == '-t': script_path=arg.rstrip("/")
+        elif opt == '-n': forcenew=True
+
 except:
     print """\
 Usage:
@@ -24,30 +37,9 @@ Interact with factory server and perform diagnostics. Options are:
     -t path           - path to downloaded test lists and executables, default is "./"
     -n                - register deviceID as a new device, i.e. force phase 1 operation
 
-The caller must always provide the build ID.
-
-The caller also provides the device ID if programmed. If not given, dodiag will
-attempt to read it from the nominal device ID file, and if that fails it will
-scan the PCB barcode and use that as the device ID.
-
-A phase 1 diagnostic must program DEVICEID from the environment into long term
-storage where the caller can find it.
+Does not exit (except after showing this message)
 """
     sys.exit(1)
-
-if len(args) != 2: raise Exception("Must specify buildID and deviceID")
-
-buildID=args[0]
-deviceID=args[1]
-
-pionicIP="192.168.111.1"        # IP address of pionic controller
-forcenew=False                  # if set, register as device as "newdevice"
-script_path="."                 # path to phaseX scripts
-
-for opt, arg in opts:
-    if opt == '-p': pionicIP=arg
-    elif opt == '-t': script_path=arg.rstrip("/")
-    elif opt == '-n': forcenew=True
 
 class PionicFail(Exception): pass
 # Send a request to the pionic controller, return response
@@ -64,18 +56,17 @@ def pionic(request, data=None, debug=0):
         raise PionicFail("%s in service %s" % (r.reason, request))
     return r.read().strip()
 
-# display message in center or top-left of screen
-def badge(text, fg="white", bg="blue", size=90):
-    if text is None:
-        pionic("display?clear&fg=%s&bg=%s"%(fg,bg))
-    else:
-        pionic("display?text&badge&size=%s&fg=%s&bg=%s"%(size,fg,bg), text)
+# wrap text to specified width
+def wrap(text, width=42):
+    return reduce(lambda line, word: '%s%s%s' % (line, ' \n'[(len(line)-line.rfind('\n')-1 + len(word.split('\n',1)[0]) >= width)], word), text.split(' '))
 
-# wrap text to 42 columns
-def wrap(text): return reduce(lambda line, word: '%s%s%s' % (line, ' \n'[(len(line)-line.rfind('\n')-1 + len(word.split('\n',1)[0]) >= 42)], word), text.split(' '))
-
-def report(text, fg="white", bg="blue", size=30):
-    pionic("display?text&size=%d&fg=%s&bg=%s"%(size,fg,bg),wrap(text))
+class DisplayFail(Exception): pass
+# display message in ULH corner of screen
+def report(text, fg="white", bg="blue"):
+    try:
+        pionic("display?text&size=30&fg=%s&bg=%s"%(fg,bg),wrap(text, width=42))
+    except Exception as e:
+        raise DisplayFail(e)
 
 # request service from factory server via pionic port 61080
 class FactoryFail(Exception): pass
@@ -267,13 +258,15 @@ try:
                "Phase     : %s\n" % phase +
                ("\nALL TESTS COMPLETE!" if state == "COMPLETE" else ""),
                bg="green")
-    try:
-        sys.exit(failed)
-    except:
-        pass
 
 except:
     t,v,tb=sys.exc_info()
     traceback.print_exc()
-    report(test_failed+"\n\n%s@%d: %s" % (t.__name__,tb.tb_lineno,str(v)), bg="red", fg="white")
-    sys.exit(1)
+    if t != DisplayFail:
+        report(test_failed+"\n\n%s@%d: %s" % (t.__name__,tb.tb_lineno,str(v)), bg="red", fg="white")
+
+# No exit!
+finally:
+    while True:
+        print "Reoot now"
+        time.sleep(30)

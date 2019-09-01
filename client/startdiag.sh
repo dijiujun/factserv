@@ -8,7 +8,7 @@
 # This is the pionic controller's IP address. Note pionic forwards port 61080
 # to the factory server port 80, and 61443 to factory server port 443. All
 # server traffic should go via these ports.
-pionic=192.168.111.1  # pionic controller IP address
+pionicIP=192.168.111.1  # pionic controller IP address
 
 # This is the factory detction method. If the DUT has a pre-defined static IP
 # address at the time that this script runs, then use 'http'. Otherwise use
@@ -53,12 +53,20 @@ address=
 development="paYQewbP520iAv1hIi/A1lvYyVzMdDv6yEmp9El0aPc="
 production=""
 
-# die with message to stderr
+# print message and exit
 die() { echo $* >&2; exit 1; }
+
+# XXX define the work directory. Ideally it should be in a ramdisk so
+# downloaded diagnostic code doesn't survive reboot (assume worst case size
+# 256M). But in case it's persistent, try to delete it here anyway.  If the
+# delete fails then something is very wrong.
+workspace=/tmp/diagwork
+rm -rf $workspace
+[ ! -e $workspace ] || die "Can't remove $workspace!"
 
 curl="curl -qsSf"
 
-# First, try to detect the factory.
+# Try to detect the factory.
 case "$method" in
     beacon)
         # Listen for an ethernet beacon. If we don't hear one then
@@ -71,11 +79,11 @@ case "$method" in
         ;;
 
     http)
-        # We expect that $pionic is on the local subnet and forwards port 61080
+        # We expect that $pionicIP is on the local subnet and forwards port 61080
         # to the server http, and 61433 to the server https. Perform a server
-        # test connect, if it doesn't work then assume we're not in the factory
-        # and just exit.
-        $curl -m 2 "http://$pionic:61080/cgi-bin/factory?service=fixture" &>/dev/null || exit 0
+        # 'fixture' connect, if it doesn't work then assume we're not in the
+        # factory and just quietly exit.
+        $curl -m 2 "http://$pionicIP:61080/cgi-bin/factory?service=fixture" >/dev/null 2>/dev/null || exit 0
         ;;
 
     *)
@@ -83,27 +91,33 @@ case "$method" in
         ;;
 esac
 
-# If we're here, then we're in the factory. Make sure the only way out is with
-# a reboot.
-trap 'while true; do echo "Reboot now"; sleep 5; done' EXIT
+# Here, we're in factory mode, there is no escape
 
-# Tell operator
-printf "Starting\nComenzando\n开始" |  $curl --data-binary @- "http://$pionic/display?text&badge"
+# given forground and background colors, and up to 24 character text, display pionic badge
+badge() { 
+    [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
+    $echo $3 | $curl --data-binary @- "http://$pionicIP/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+}
+
+# spin forever, after writing exit screen
+stop() { set -eu; trap '' EXIT; while true; do echo "Reboot now"; sleep 30; done; }
+
+# on unexpected exit, display error and stop
+trap 'set +eu; badge white red "Unexpected error\nError inesperado\n意外的错误"; stop;' EXIT
+
+# Ok we're launching, tell operator
+badge white black "Starting\nComenzando\nn开始"
 
 # XXX set the build ID. The build ID must uniquely identify the software build
 # and the DUT device type. Note the server associates the build ID with a
 # specific tarball containing the diagnostic code, therefore the build string
 # must be predictable and readable by humans.
-build=test
-echo "Using buildID $build"
+buildID=test
+echo "Using buildID $buildID"
 
-# XXX create a work directory. The work directory must not survive reboot, if
-# necessary mount a ramdisk/tmpfs and cd to that. The directory must be large
-# enough to contain the contents of the diagnostic tarball, 256MB is a good
-# target. The exact path doesn't matter.
-echo "Creating work directory"
-mkdir /tmp/diag
-cd /tmp/diag
+# Create the empty work directory and make it the current working directory.
+mkdir -p $workspace
+cd $workspace
 
 # Retrieve the diagnostic tarball from the server https (via pionic port 61443)
 # and unpack it into the current directory. Verify the hash of the https
@@ -113,11 +127,11 @@ cd /tmp/diag
 # production software, see the note above.
 for pubkey in ${production:-} ${development:-}; do
     echo "Downloading with key hash $pubkey"
-    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$build" "https://$pionic:61443/cgi-bin/factory?service=download" | tar -xzv; then
+    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$buildID" "https://$pionicIP:61443/cgi-bin/factory?service=download" | tar -xzv; then
         [ -x ./dodiag.sh ] || die "Tarball does not contain dodiag.sh"
-        # invoke with various parameters of interest
-        ./dodiag.sh $pionic $build
-        die "dodiag.sh exit with status $?"
+        # invoke with parameters of interest, it should not return
+        ./dodiag.sh $pionicIP $buildID
+        die "dodiag.sh failed with status $?"
     fi
 done
 die "Tarball download failed"
