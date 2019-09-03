@@ -1,4 +1,5 @@
-This repo provides factory diagnostic infrastructure for embedded systems.
+This repo provides factory diagnostic infrastructure for embedded systems. It
+is intended for use with Raspberry Pi running the 'pionic' repo.
 
 Theory of operation:
 
@@ -11,7 +12,7 @@ Theory of operation:
     The DUT boots normal production code, allowing testing of DUTs even if
     secure boot is enabled.
 
-    At some point early in the boot, the normal production code executes the
+    At some point early in the boot, the normal production code executes
     'startdiag.sh'. The script tries to detect if it is in the factory, either
     by listening for an ethernet "beacon" or by performing a specific HTTP
     fetch.
@@ -64,3 +65,44 @@ with server and CGIs.
 
     dodiag - this also goes in the diagnostics tarball, it invokes the various
     tests and interacts with the factory server.
+
+    phaseX - these also go in the diagnostics tarball, and define which tests
+    to perform in each phase. The included scripts are examples only, in real
+    life these will be completely different. Up to 4 phases are currently
+    supported.
+
+To demo this code:
+
+    Create a factory server, per the instructions in the server directory in
+    tyhis repo.
+
+    Create a pionic raspberry PI controller per the instructions in the
+    'pionic' repo. A display should be attached.
+
+    Browse to factory server 'Test Station' manager and add station 1 with the
+    Pi's MAC address (the Pi will report this when it boots).
+
+    Plug the Pi into the factory interface and boot it, it should come up with
+    'Test Station 1 Ready'.
+
+    Browser to factory server 'Build' manager and add build 'test' with phase1,
+    phase2, and phase3 all allowed on test station 1.
+
+    Create a tar.gz of the files in the client directory (except startdiag.sh)
+    and scp that to the factory server /var/www/html/download directory.
+
+    Plug a laptop into the pionic USB network adapter and boot it, assuming it
+    has DHCP enabled it should get an address in the 192.168.111.2XX range.
+
+    scp the file startdiag.sh to the laptop (or git clone this repo)
+
+    Run startdiag.sh on the laptop. It will pull the tarball from the factory
+    server and perform the dummy diags within. Note you will be requested to
+    'Reboot now' when testing is complete. but on the laptop it's OK to just
+    press ^C. Each time you run startdiag.sh it will perform the next phase.
+    This is the equivalent of the target DUT rebooting. 
+    
+    Browse to factory server 'Tests' and 'Devices' pages to see the results of
+    the testing.
+
+

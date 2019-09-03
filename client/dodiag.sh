@@ -73,10 +73,10 @@ else
     if  ! $curl "http://$pionicIP:61080/cgi-bin/factory?service=newdevice&buildid=$buildID" >/dev/null; then
         echo "Build ID $buildID  phase 1 not allowed" >&2
         badge red white "Not allowed\nNo permitido\n不允许"
-        exit 0
+        stop
     fi 
     # Get barcode at least 6 characters
-    barcode=$(getbar '^.{6,}\$')
+    barcode=$(getbar '^.{6,}$')
     deviceID="TEST-$barcode"
     echo "$deviceID" > /tmp/deviceid
     newdevice="-n" # tell dodiag to register a new deviceID, forces phase 1 operation
