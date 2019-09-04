@@ -268,5 +268,5 @@ except:
 # No exit!
 finally:
     while True:
-        print "Reoot now"
+        print "Reboot now"
         time.sleep(30)
