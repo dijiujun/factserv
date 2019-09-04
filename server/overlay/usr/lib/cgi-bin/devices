@@ -2,8 +2,7 @@
 
 import traceback, re, cgi, sys, psycopg2, os, base64
 from urllib import urlencode
-
-from util import escape, select, table, click, html, authenticate
+from util import *
 
 #authenticate("Technician","tech:techx4")
 
@@ -123,20 +122,19 @@ try:
                              [
                                  ["Device ID","Build ID","Created","Updated","State","Phase","Station"]
                              ] +
-                             [("pass" if row[4] == 'COMPLETE' else None,
+                             [(row[4],
                                  [click(row[0],"action=tests", {"deviceid":row[0],"deviceid_type":"="})]+
                                  escape(list(row[1:4])) +
                                  [
-                                   ("pass" if row[4] == 'PASSED' else "fail" if row[4] =='FAILED' or row[4] == 'FAILING' else None,  
-                                   click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4]))
+                                   click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4])
                                  ] +
                                  escape(list(row[5:]))
                               ) for row in rows
                              ]
                            ))
 
-    # print generated content
-    print html("Device Status", None, content)
+    # print generated content with tick footer
+    print html("Device History", None, content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

@@ -51,88 +51,64 @@ def click(label, action, params):
             "&nbsp;"+escape(label)+
             "</form>")
 
-# global styles
-gstyles="""
-    table td { padding-right: 10px; padding-left: 10px; padding-top: 4px; padding-bottom: 4px; font-family:monospace; vertical-align:top }
-    
-    table.form { margin: 20px }
-    table.form td:nth-child(1) { text-align: right; font-weight: bold; }
-
-    table.data { border-collapse: collapse; }
-    table.data td { border: solid 1px; }
-    table.data tr:nth-child(1) { font-weight: bold; }
-    
-    table tr.pass, table td.pass { background-color: green; color: white; font-weight: bold }
-    table tr.pass a, table td.pass a { color: white }
-
-    table tr.fail, table td.fail { background-color: #D00000; color: white; font-weight: bold }
-    table tr.fail a, table td.fail a { color: white }
-
-    button.click { border: 1px outset darkgrey; background-color: white; padding: 0; height:12px; width:12px; border-radius:12px; vertical-align: super }
-    button.click:hover { background-color: grey; }
-
-    div.footer { float:left; } 
-    div.footer form { float: left; }
-    div.footer button { font-size: 8px; float:left; }
-    div.footer span { font-size: 12px; float:left; }
-
-    input { font-family:monospace }
-"""    
-
-# Given html title, additional styles, and content, return html page with cache controls, title, footer, etc
-def html(title, style, content):
+# footer shows home button, current server time and elapsed time
+def tick_footer():
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
     cur.execute("select uct()")
     now=cur.fetchone();
+    return """
+        <hr>
+        <div class=footer>
+            <form action='/'><button>Home</button></form>
+            <span>&nbsp; Server time is """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT &nbsp;</span> 
+            <span id=ticks></span>
+        </div>
+        <script>
+        let start=new Date; 
+        function tick() 
+        {
+            let diff=Math.floor((new Date - start)/1000);
+            t=''; 
+            if (diff >= 86400) 
+            {
+                d = Math.floor(diff / 86400);
+                t+=d+((d==1)?' day,':' days, ');
+            } 
+            if (diff >= 3600)
+            {
+                h =Math.floor((diff/ 3600) % 24);
+                t+=h+((h==1)?' hour,':' hours, ');
+            }
+            if (diff >= 60)
+            {
+                m=Math.floor((diff / 60) % 60);
+                t+=m+((m==1)?' minute, ':' minutes, ');
+            } 
+            s=Math.floor(diff % 60);
+            t+=s+((s==1)?' second':' seconds');
+            document.getElementById('ticks').innerHTML = "("+t+" ago)"
+        }       
+        ticker=setInterval(tick,1000);  
+        </script>
+    """
 
+# Givena title, optional styles, and html content, return
+# an html page with cache controls, title, footer, etc.
+def html(title, style, content):
     headers = ["Content-type: text/html; charset=utf-8","Cache-Control: no-cache,max-age:120,must-revalidate"]
-    s=("\n".join(headers) + "\n\n" + 
-       """
-       <!DOCTYPE html>
-       <html> <head>
-       <title>""" +  title + """</title>
-       <style>""" + gstyles + (style or "") + """</style>
-       <script>
-       let start=new Date; 
-       function tick() 
-       {
-           let diff=Math.floor((new Date - start)/1000);
-           t=''; 
-           if (diff > 86400) 
-           {
-               d = Math.floor(diff / 86400);
-               t+=d+((d==1)?' day,':' days, ');
-           } 
-           if (diff > 3600)
-           {
-               h =Math.floor((diff/ 3600) % 24);
-               t+=h+((h==1)?' hour,':' hours, ');
-           }
-           if (diff > 60)
-           {
-               m=Math.floor((diff / 60) % 60);
-               t+=m+((m==1)?' minute, ':' minutes, ');
-           } 
-           s=Math.floor(diff % 60);
-           t+=s+((s==1)?' second':' seconds');
-            
-           document.getElementById('ago').innerHTML = "("+t+" ago)"
-       }       
-      
-       ticker=setInterval(tick,1000);  
-       </script>
-       </head> <body> 
-       <h2>""" + title + """</h2>       
-       """ + content + """
-       <hr>
-       <div class=footer>
-          <form action='/'><button>Home</button></form>
-          <span>&nbsp; Server time is """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT &nbsp;</span> 
-          <span id=ago></span>
-       </div> 
-       </body> 
-       </html>""")
+    s=("\n".join(headers) + "\n\n" + "<!DOCTYPE html>\n" +
+       """<html>
+          <head>
+          <title>""" +  title + """</title>
+          <link href='/style.css' rel='stylesheet' type='text/css'/>
+          <style>""" + (style or "") + """</style>
+          </head> 
+          <body>
+          <h2>""" + title + """</h2> 
+          """ + content + """
+          </body>
+          </html>""")
     return '\n'.join(map (lambda x:' '.join(x.split()),map(lambda x:x.strip(),s.split('\n'))))
 
 def plaintext(content):
@@ -142,12 +118,12 @@ def plaintext(content):
 # specified as "name:password". If not authenticated then aborts with status
 # 401, so must be called before any other output.
 def authenticate(realm, user):
-    if not "GATEWAY_INTERFACE" in os.environ: return # skip if run from command line
+    if not "GATEWAY_INTERFACE" in os.environ: return # skip if cgi is run from command line
     auth=""
     try:
         auth = base64.decodestring(os.environ["HTTP_AUTHORIZATION"].split()[1])
         if auth != user:
             raise Exception
     except:
-        print 'Content-type: text/plain\nOOPS: %s\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="%s"\n' % (auth,realm)
+        print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="%s"\n' % realm
         sys.exit(0)

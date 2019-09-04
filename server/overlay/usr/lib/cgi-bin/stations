@@ -1,8 +1,7 @@
 #!/usr/bin/python2
 
 import traceback, re, cgi, sys, psycopg2, subprocess, os, base64
-
-from util import escape, select, table, click, html, authenticate
+from util import *
 
 authenticate("Supervisor", "supervisor:superx5")
 
@@ -105,7 +104,7 @@ try:
     # print generated content
     print html("Station Manager", 
                "table.data tr:nth-child(even) { background: #CCC; }", 
-               content)
+               content + tick_footer())
 
 except:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

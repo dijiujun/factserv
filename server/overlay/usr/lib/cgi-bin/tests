@@ -1,8 +1,7 @@
 #!/usr/bin/python2
 
 import traceback, re, cgi, sys, psycopg2, os, base64
-
-from util import escape, select, table, click, html, authenticate
+from util import *
 
 #authenticate("Technician","tech:techx4")
 
@@ -130,23 +129,23 @@ try:
                               [
                                   ["Device ID", "Started","Ended","Station","Phase","Test Name","Command", "Status", "Output"]
                               ] +
-                              [( (("fail" if row[8] else "pass") if row[3] else None) if not row[7] else None,
+                              [( (("FAILED" if row[8] else "PASSED") if row[3] else None) if not row[7] else None,
                                   [click(row[1],"action=devices",{'deviceid':escape(row[1]),'deviceid_type':'='})] +
                                   list(row[2:9]) +
-                                  [(("fail" if row[8] else "pass") if row[3] else None, click(row[9],None,{'drill':escape(row[0])}) if row[9] else "")]
+                                  [(("FAILED" if row[8] else "PASSED") if row[3] else None, click(row[9],None,{'drill':escape(row[0])}) if row[9] else "")]
                                ) for row in rows
                               ]
                             ))
 
     # print generated content
-    print html("Test Status", 
+    print html("Test History", 
                """
                 table.drill { border-collapse: collapse; }
                 table.drill td { border: solid 1px; }
                 table.drill td:nth-child(1) { font-weight: bold; }
                 table.drill td:nth-child(2) { white-space: pre; }
-               """, 
-               content)
+               """,
+               content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

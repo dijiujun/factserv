@@ -1,0 +1,24 @@
+table td { padding-right: 10px; padding-left: 10px; padding-top: 4px; padding-bottom: 4px; font-family:monospace; }
+
+table.form { margin: 20px }
+table.form td:nth-child(1) { text-align: right; font-weight: bold; }
+
+table.data { border-collapse: collapse; }
+table.data td { border: solid 1px; }
+table.data tr:nth-child(1) { font-weight: bold; }
+
+table tr.PASSED,     table td.PASSED,      table tr.PASSED a,     table td.PASSED a     { background-color: lightgreen; color: black; font-weight: bold }
+table tr.FAILED,     table td.FAILED,      table tr.FAILED a,     table td.FAILED a     { background-color: #D00000; color: white; font-weight: bold }
+table tr.FAILING,  table tr.FAILING a, table td.FAILING,    table td.FAILING a  { background-color: purple; color: white; font-weight: bold }
+table tr.COMPLETE, table td.COMPLETE,  table tr.COMPLETE a, table td.COMPLETE a { background-color: green; color: white; font-weight: bold }
+table tr.TESTING,  table td.TESTING,   table tr.TESTING a,  table td.TESTING a  { background-color: blue; color: white; font-weight: bold }
+
+button.click { border: 1px outset darkgrey; background-color: white; padding: 0; height:12px; width:12px; border-radius:12px; vertical-align: super }
+button.click:hover { background-color: grey; }
+
+div.footer { float:left; } 
+div.footer form { float: left; }
+div.footer button { font-size: 8px; float:left; }
+div.footer span { font-size: 12px; float:left; }
+
+input { font-family:monospace }

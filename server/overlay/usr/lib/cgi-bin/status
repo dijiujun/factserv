@@ -1,0 +1,65 @@
+#!/usr/bin/python2
+# show real-time test station status
+
+import traceback, sys, os 
+from util import *
+
+try:
+
+    content="""
+        <table class=data id=main> </table>
+        <script>
+            function update(url)
+            {
+                // returned by 'stations' query
+                headers=["Station", "Device ID", "Build ID", "Phase", "State", "Updated"];
+                keys   =["station", "deviceid",  "buildid",  "phase", "state" ,"updated"];
+
+                fetch("./query?what=stations") 
+                .then(function(response) {
+                      return response.json();
+                }) 
+                .then(function(result) {
+                    s="<tbody><tr>";
+                    for (var h = 0; h < headers.length; h++) { s+="<td>"+headers[h]+"</td>"; }
+                    s+="</tr>";
+                    for (var r = 0; r < result.length; r++) {
+                        state=result[r]["state"]
+                        if (state == "") {
+                            s+="<tr state=gray><td>"+result[r]["station"]+"</td><td colspan=6>No data</td>"
+                        } else {
+                            s += "<tr class='"+state+"'>"
+                            for (var k = 0; k < keys.length; k++) {
+                                s+="<td>"; 
+                                if (!k) {
+                                    // First element is clickable
+                                    s+="<form method=get>"+
+                                       "<button class=click type=submit></button>"+
+                                       "<input type=hidden name='drill' value='"+escape(result[r][keys[0]])+"'>"+
+                                       "&nbsp;"+result[r][keys[k]]+"</form>" 
+                                } else {
+                                    s+=result[r][keys[k]];
+                                }   
+                                s += "</td>"; 
+                            }
+                        }
+                        s += "<tr>";
+                    }
+                    s+="</tbody>";
+                    document.getElementById("main").innerHTML = s;
+                });
+                setTimeout(update,2000);
+            }
+            window.onload=update;
+        </script>
+    """
+ 
+    # print generated content
+    print html("Current Testing", None, content)
+
+except Exception as e:
+    print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
+    print
+    traceback.print_exc(file = sys.stdout)
+    print
+    for k in sorted(form.keys()): print k,"=",form.getvalue(k)
