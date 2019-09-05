@@ -8,12 +8,19 @@ try:
 
     content="""
         <table class=data id=main> </table>
+        <hr>
+        <div class=footer>
+            <form action='/'><button>Home</button></form>
+            <span>&nbsp;</span>
+            <span id=now></span> 
+        </div>
+        
         <script>
             function update(url)
             {
                 // returned by 'stations' query
                 headers=["Station", "Device ID", "Build ID", "Phase", "State", "Updated"];
-                keys   =["station", "deviceid",  "buildid",  "phase", "state" ,"updated"];
+                keys   =["station", "deviceid",  "buildid",  "phase", "state" ,"updated"]
 
                 fetch("./query?what=stations") 
                 .then(function(response) {
@@ -26,9 +33,9 @@ try:
                     for (var r = 0; r < result.length; r++) {
                         state=result[r]["state"]
                         if (state == "") {
-                            s+="<tr state=gray><td>"+result[r]["station"]+"</td><td colspan=6>No data</td>"
+                            s+="<tr class='UNKNOWN'><td>"+result[r]["station"]+"</td><td colspan=6>No data</td>"
                         } else {
-                            s += "<tr class='"+state+"'>"
+                            s += "<tr class='"+(result[r]["stale"]?"STALE":state)+"'>"
                             for (var k = 0; k < keys.length; k++) {
                                 s+="<td>"; 
                                 if (!k) {
@@ -48,6 +55,15 @@ try:
                     s+="</tbody>";
                     document.getElementById("main").innerHTML = s;
                 });
+                
+                fetch("./query?what=now") 
+                .then(function(response) {
+                      return response.json();
+                }) 
+                .then(function(result) {
+                    document.getElementById("now").innerHTML="Server time is "+result[0]["now"]+" UCT";
+                });
+                
                 setTimeout(update,2000);
             }
             window.onload=update;
@@ -55,7 +71,7 @@ try:
     """
  
     # print generated content
-    print html("Current Testing", None, content)
+    print html("Current Test Status", None, content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

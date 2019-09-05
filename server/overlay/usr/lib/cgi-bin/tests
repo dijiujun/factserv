@@ -115,7 +115,8 @@ try:
                  "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
                  "<hr>")
 
-        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, substring(testname,1,50), substring(command,1,50), status, substring(split_part(stdout,E'\n',1),1,50) " +
+        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, substring(testname,1,50), substring(command,1,50), status, substring(split_part(stdout,E'\n',1),1,50), " +
+                    "ended is NULL and started < now()-interval '10 minutes' as stale " +
                     "from tests " +
                     ("where " + " and ".join(where) if where else "") +
                     " order by id %s limit %s" % (sort, limit))
@@ -129,11 +130,11 @@ try:
                               [
                                   ["Device ID", "Started","Ended","Station","Phase","Test Name","Command", "Status", "Output"]
                               ] +
-                              [( (("FAILED" if row[8] else "PASSED") if row[3] else None) if not row[7] else None,
-                                  [click(row[1],"action=devices",{'deviceid':escape(row[1]),'deviceid_type':'='})] +
-                                  list(row[2:9]) +
-                                  [(("FAILED" if row[8] else "PASSED") if row[3] else None, click(row[9],None,{'drill':escape(row[0])}) if row[9] else "")]
-                               ) for row in rows
+                              [( (("FAILED" if status else "PASSED") if ended else "STALE" if stale else None) if not command else None,
+                                  [ click(deviceid,"action=devices",{'deviceid':escape(deviceid),'deviceid_type':'='}) ] +
+                                  [ started, ended, station, phase, testname, command, status ] +
+                                  [ (("FAILED" if status else "PASSED") if ended else None, click(stdout,None,{'drill':escape(id)}) if stdout else "") ]
+                               ) for id, deviceid, started, ended, station, phase, testname, command, status, stdout, stale in rows
                               ]
                             ))
 

@@ -25,7 +25,7 @@ try:
                          "<button name=action value=none>No</button>" +
                      "</form>")
         elif action[0]=='yes':
-            cur.execute("update devices set phase=1, state='UNKNOWN' where deviceid=%s and state != 'COMPLETE'", (action[1],))
+            cur.execute("update devices set phase=1, state='UNKNOWN', station=0 where deviceid=%s and state != 'COMPLETE'", (action[1],))
             conn.commit()
 
         else:
@@ -113,7 +113,12 @@ try:
                      "<form method=get><input style='vertical-align:text-bottom' type=submit value=Reset>"+
                  "</form>"+
                  "<hr>")
-        cur.execute("select deviceid, buildid, date_trunc('seconds',created), date_trunc('seconds',updated), state, phase, station from devices "+("where " + " and ".join(where) if where else "")+" order by updated %s limit %s"%(sort,limit))
+        cur.execute("select deviceid, buildid, date_trunc('seconds',created), date_trunc('seconds',updated), state, phase, station, " +
+                    "(state='TESTING' or state='FAILING') and updated < now()-interval '10 minutes' as stale, " +
+                    "state='PASSED' or state='FAILED' as idle " +
+                    "from devices "+ 
+                    ("where " + "and ".join(where) + " " if where else "") + 
+                    "order by updated %s limit %s" % (sort,limit))
         if not cur.rowcount:
             content += "No match!"
         else:
@@ -122,14 +127,12 @@ try:
                              [
                                  ["Device ID","Build ID","Created","Updated","State","Phase","Station"]
                              ] +
-                             [(row[4],
-                                 [click(row[0],"action=tests", {"deviceid":row[0],"deviceid_type":"="})]+
-                                 escape(list(row[1:4])) +
-                                 [
-                                   click(row[4], None, {"action":"reset=%s" % row[0]}) if (row[4] != 'COMPLETE' and row[4] != 'UNKNOWN') else escape(row[4])
-                                 ] +
-                                 escape(list(row[5:]))
-                              ) for row in rows
+                             [( "STALE" if stale else state,
+                                 [ click(deviceid,"action=tests", {"deviceid":deviceid,"deviceid_type":"="}) ] +
+                                 [ buildid, created, updated ] +
+                                 [ click(state, None, {"action":"reset=%s" % deviceid}) if idle or stale else escape(state) ] +
+                                 [ phase, station ]
+                              ) for deviceid, buildid, created, updated, state, phase, station, stale, idle in rows
                              ]
                            ))
 

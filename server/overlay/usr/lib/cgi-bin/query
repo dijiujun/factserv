@@ -6,7 +6,6 @@ import traceback, sys, os, cgi, psycopg2, psycopg2.extras, json
 
 try:
     # recursively stringify arbitrary data structure, None becomes '', unknown types become str
-    # this is mostly to handle embedded datetime objects
     def stringify(d): 
         if isinstance(d, dict): return dict(map(lambda k:[k,stringify(d[k])], d.keys()))
         if isinstance(d, tuple): return tuple(stringify(list(d)))
@@ -14,38 +13,53 @@ try:
         if isinstance(d, (int,str)): return d
         return '' if d is None else str(d) 
 
-    data=""
-
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    data=None
+    
     form=cgi.FieldStorage()
-
     what=form.getvalue('what')
     if what == 'now':
         # return current server time
-        cur.execute("select uct() as now")
-        data=cur.fetchone()
+        cur.execute("select date_trunc('second',uct()) as now")
 
     elif what == 'stations':
         # return latest device for each station
-        cur.execute("select s.station, d.deviceid, d.buildid, d.updated, d.state, d.phase from devices as d " +
-                     "join (select station, max(updated) as updated from devices group by station) as l on d.station=l.station and d.updated=l.updated " +
-                     "right join stations as s on d.station = s.station " +
-                     "order by updated desc nulls last")
-        data=cur.fetchall()
+        cur.execute("select s.station, d.deviceid, d.buildid, date_trunc('second',d.updated) as updated, d.state, d.phase, " +
+                    "(state='TESTING' or state ='FAILING') and d.updated < now()-interval '10 minutes' as stale " +
+                    "from devices as d " +
+                    "join (select station, max(updated) as updated from devices group by station) as l on d.station=l.station and d.updated=l.updated " +
+                    "right join stations as s on d.station = s.station " +
+                    "order by station")
 
-    elif what == 'station':
+    elif what == 'tests':
+        # return latest tests form specified station
         station=form.getvalue('station')
-        cur.execute("select * from tests where station=%s and id>=(select id from tests where station=%s and command='' order by started desc limit 1)",(station,station))
-        data=cur.fetchall()
+        cur.execute("select id, deviceid, date_trunc('second', started) as started, date_trunc('second', ended) as ended, station, phase, " +
+                    "substring(testname,1,50) as testname, substring(command,1,50) as command, status, substring(split_part(stdout,E'\n',1),1,50) as stdout, " +
+                    "ended is null and started < now()-interval '10 minutes' as stale " + 
+                    "from tests where station=%s and " +
+                    "id >= (select id from tests where station=%s and command='' order by started desc limit 1)",(station,station))
+
+    elif what == 'device':
+        # return device status
+        deviceid=form.getvalue('deviceid')
+        cur.execute("select deviceid, buildid, state, phase, station, date_trunc('second',created) as created, date_trunc('second',updated) as updated, " + 
+                    "(state='TESTING' or state='FAILING') and updated < now()-interval '10 minutes' as stale " +
+                    "from devices where deviceid=%s", (deviceid,))
  
     else:
         raise Exception("Invalid status request '%s'" % what)    
 
-    if "debug" in form: 
-        print data
+    if not cur.rowcount: raise Exception("No results")
 
-    print "Content-type: application/json\n\n" + json.dumps(stringify(data))
+    data=cur.fetchall()
+
+    if "raw" in form:
+        print "Content-type: text/plain\n\n" + str(data)
+    else:
+        print "Content-type: application/json\n\n" + json.dumps(stringify(data))
 
 except Exception:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
