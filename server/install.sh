@@ -84,7 +84,9 @@ a2ensite default-ssl
 ln -sf /usr/share/zoneinfo/UCT /etc/localtime
 
 # configure iptables
+iptables -P INPUT ACCEPT
 iptables -F # flush everything
+iptables -F -t nat
 iptables -X # delete user chains
 iptables -Z # zero counters
 
