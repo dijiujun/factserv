@@ -85,7 +85,7 @@ try:
             content = "No stations!"
         else:
             rows=cur.fetchall()
-            content = (table(("data",
+            content = table(("data",
                               [ 
                                   ["Station","MAC","Fixture","Comment","&nbsp;"] 
                               ] +
@@ -98,8 +98,8 @@ try:
                                   ]
                                 ) for row in rows
                               ]
-                             )) +
-                       "<p><form method=get><button name=action value=new>New station</button></form>")
+                             ))
+        content += "<p><form method=get><button name=action value=new>New station</button></form>"
 
     # print generated content
     print html("Station Manager", 
