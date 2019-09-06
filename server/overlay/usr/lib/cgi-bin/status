@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 # show real-time test station status
 
-import traceback, sys, os 
+import traceback, sys, os
 from util import *
 
 try:
@@ -12,20 +12,20 @@ try:
         <div class=footer>
             <form action='/'><button>Home</button></form>
             <span>&nbsp;</span>
-            <span id=now></span> 
+            <span id=now></span>
         </div>
-        
+
         <script>
             function update(url)
             {
                 // returned by 'stations' query
-                headers=["Station", "Device ID", "Build ID", "Phase", "State", "Updated"];
-                keys   =["station", "deviceid",  "buildid",  "phase", "state" ,"updated"]
+                headers=["Station", "Device ID", "Build ID", "State", "Phase", "Current Test" ];
+                keys   =["station", "deviceid",  "buildid",  "state" ,"phase", "testname"];
 
-                fetch("./query?what=stations") 
+                fetch("./query?what=stations")
                 .then(function(response) {
                       return response.json();
-                }) 
+                })
                 .then(function(result) {
                     s="<tbody><tr>";
                     for (var h = 0; h < headers.length; h++) { s+="<td>"+headers[h]+"</td>"; }
@@ -37,17 +37,52 @@ try:
                         } else {
                             s += "<tr class='"+(result[r]["stale"]?"STALE":state)+"'>"
                             for (var k = 0; k < keys.length; k++) {
-                                s+="<td>"; 
-                                if (!k) {
-                                    // First element is clickable
-                                    s+="<form method=get>"+
-                                       "<button class=click type=submit></button>"+
-                                       "<input type=hidden name='drill' value='"+escape(result[r][keys[0]])+"'>"+
-                                       "&nbsp;"+result[r][keys[k]]+"</form>" 
-                                } else {
-                                    s+=result[r][keys[k]];
-                                }   
-                                s += "</td>"; 
+                                s+="<td>";
+                                switch(keys[k]) {
+                                    case  "deviceid":
+                                        s += "<form method=get action=tests>" +
+                                             "<button class=click type=submit></button>" +
+                                             "<input type=hidden name='deviceid' value='"+escape(result[r]["deviceid"])+"'>" +
+                                             "<input type=hidden name='deviceid_type' value='='>" +
+                                             "&nbsp;"+result[r]["deviceid"]+"</form>";
+                                        break;
+
+                                    case "testname":
+                                        if (state == "TESTING" || state == "FAILING") {
+                                            s+=result[r]['testname'];
+                                            let diff=Math.ceil(result[r]["elapsed"]);
+                                            if (diff > 3)
+                                            {
+                                                s += " (";
+                                                if (diff >= 86400)
+                                                {
+                                                    n = Math.floor(diff / 86400);
+                                                    s+=n+((n==1)?" day,":" days, ");
+                                                }
+                                                if (diff >= 3600)
+                                                {
+                                                    n =Math.floor((diff/ 3600) % 24);
+                                                    s+=n+((n==1)?" hour,":" hours, ");
+                                                }
+                                                if (diff >= 60)
+                                                {
+                                                    n=Math.floor((diff / 60) % 60);
+                                                    s+=n+((n==1)?" minute, ":" minutes, ");
+                                                }
+                                                n=Math.floor(diff % 60);
+                                                s+=n+((n==1)?" second":" seconds");
+                                                s+=")";
+                                            }
+                                        } else {
+                                            s+="&nbsp;";
+                                        }
+                                        break;
+
+                                    default:
+                                        s += result[r][keys[k]];
+                                        break;
+                                }
+                                s += "</td>";
                             }
                         }
                         s += "<tr>";
@@ -55,21 +90,21 @@ try:
                     s+="</tbody>";
                     document.getElementById("main").innerHTML = s;
                 });
-                
-                fetch("./query?what=now") 
-                .then(function(response) {
-                      return response.json();
-                }) 
-                .then(function(result) {
-                    document.getElementById("now").innerHTML="Server time is "+result[0]["now"]+" UCT";
-                });
-                
-                setTimeout(update,2000);
+
+            //    fetch("./query?what=now")
+            //    .then(function(response) {
+            //        return response.json();
+            //    })
+            //    .then(function(result) {
+            //        document.getElementById("now").innerHTML="Server time is "+result[0]["now"]+" UCT";
+            //    });
+
+                setTimeout(update,1000);
             }
             window.onload=update;
         </script>
     """
- 
+
     # print generated content
     print html("Current Test Status", None, content)
 

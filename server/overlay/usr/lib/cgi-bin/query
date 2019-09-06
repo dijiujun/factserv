@@ -6,51 +6,60 @@ import traceback, sys, os, cgi, psycopg2, psycopg2.extras, json
 
 try:
     # recursively stringify arbitrary data structure, None becomes '', unknown types become str
-    def stringify(d): 
+    def stringify(d):
         if isinstance(d, dict): return dict(map(lambda k:[k,stringify(d[k])], d.keys()))
         if isinstance(d, tuple): return tuple(stringify(list(d)))
         if isinstance(d, list): return map(lambda r:stringify(r), d)
         if isinstance(d, (int,str)): return d
-        return '' if d is None else str(d) 
+        return '' if d is None else str(d)
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
+
     data=None
-    
+
     form=cgi.FieldStorage()
     what=form.getvalue('what')
     if what == 'now':
         # return current server time
         cur.execute("select date_trunc('second',uct()) as now")
 
-    elif what == 'stations':
+    elif what == 'old':
         # return latest device for each station
-        cur.execute("select s.station, d.deviceid, d.buildid, date_trunc('second',d.updated) as updated, d.state, d.phase, " +
-                    "(state='TESTING' or state ='FAILING') and d.updated < now()-interval '10 minutes' as stale " +
-                    "from devices as d " +
-                    "join (select station, max(updated) as updated from devices group by station) as l on d.station=l.station and d.updated=l.updated " +
-                    "right join stations as s on d.station = s.station " +
-                    "order by station")
+        cur.execute("""
+            select s.station,
+                   d.deviceid, d.buildid, date_trunc('second',d.updated) as updated, d.state, d.phase
+            from devices d
+            join (select station, max(updated) as updated from devices group by station) l on d.station=l.station and d.updated=l.updated
+            right join stations s on d.station = s.station
+            order by station""")
 
-    elif what == 'tests':
-        # return latest tests form specified station
-        station=form.getvalue('station')
-        cur.execute("select id, deviceid, date_trunc('second', started) as started, date_trunc('second', ended) as ended, station, phase, " +
-                    "substring(testname,1,50) as testname, substring(command,1,50) as command, status, substring(split_part(stdout,E'\n',1),1,50) as stdout, " +
-                    "ended is null and started < now()-interval '10 minutes' as stale " + 
-                    "from tests where station=%s and " +
-                    "id >= (select id from tests where station=%s and command='' order by started desc limit 1)",(station,station))
+    elif what == 'stations':
+        # return latest test info for each station
+        cur.execute("""
+            select s.station, s.comment,
+                   t.deviceid, date_trunc('second',t.started) as started,
+                   case when ended is null then
+                        extract(epoch from uct()-t.started)
+                   else
+                        extract(epoch from t.ended-t.started)
+                   end as elapsed,
+                   substring(t.testname,1,50) as testname, t.status,
+                   d.state, d.phase, d.buildid,
+                   t.ended is null and t.started < now() - interval '10 minutes' as stale
+            from tests as t
+            join (select station, max(started) as started from tests group by station) as j on t.station=j.station and t.started=j.started
+            join devices as d on t.deviceid = d.deviceid and t.station=d.station
+            right join stations as s on s.station=t.station
+            order by s.station """)
 
     elif what == 'device':
         # return device status
         deviceid=form.getvalue('deviceid')
-        cur.execute("select deviceid, buildid, state, phase, station, date_trunc('second',created) as created, date_trunc('second',updated) as updated, " + 
-                    "(state='TESTING' or state='FAILING') and updated < now()-interval '10 minutes' as stale " +
-                    "from devices where deviceid=%s", (deviceid,))
- 
+        cur.execute("select deviceid, buildid, state, phase, station, date_trunc('second',created) as created, date_trunc('second',updated) as updated, from devices where deviceid=%s", (deviceid,))
+
     else:
-        raise Exception("Invalid status request '%s'" % what)    
+        raise Exception("Invalid status request '%s'" % what)
 
     if not cur.rowcount: raise Exception("No results")
 
