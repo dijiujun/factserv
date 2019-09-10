@@ -63,12 +63,17 @@ try:
     service=require("service")	
 
     if service == "download":
-        # Validate given buildID and the redirect to tarball with that name
-        # The redirect is handled by Apacje, the client won't see it
+        # Validate given buildID and redirect to a tarball with that name
+        # The redirect is handled by Apache, the client won't see it
         buildid = require("buildid")
         build = checkbuild(buildid)
-        print "Location: /downloads/%s.tar.gz\n" % buildid
-        quit()
+        if os.path.isfile("/var/www/html/downloads/%s/%s.tar.gz" % (station,buildid)):
+            print "Location: /downloads/%s/%s.tar.gz\n" % (station,buildid)
+            quit()
+        if os.path.isfile("/var/www/html/downloads/%s.tar.gz" % buildid):
+            print "Location: /downloads/%s.tar.gz\n" % buildid
+            quit()
+        raise Exception("No tarball for build ID '%s'" % buildid)
 
     elif service == "newdevice":
         # Validate that the given buildID is allowed to do phase 1 testing

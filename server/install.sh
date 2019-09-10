@@ -8,62 +8,86 @@ here=${0%/*}
 source $here/install.cfg
 
 if (($#)); then
-    # argument is -u?
-    (($# == 1)) && [[ $1 == -u ]] || die "Usage: $0 [-u]"
+    [ $1 == "-u" ] || die "Usage: $0 [-u]"
 
-    [ -f /etc/factory/installed ] || die "Can't uninstall, try '$0'"
+    [[ -v FORCE ]] || [ -e /etc/factory/installed ] || die "Not installed, try '$0'"
 
     ifdown $dut_interface || true
-
     # Delete overlay files
     for f in $(find $here/overlay -type f,l -printf "%P\n"); do
         rm -f /$f
-
         # restore originals from backup
         ! [ -e /$f~ ] || cp -vP /$f~ /$f
     done
 
-    # Delete etc/factory to show we did this
-    rm -rf etc/factory
+    iptables -P INPUT ACCEPT
+    iptables -F
+    iptables -F -t nat
+    systemctl disable netfilter-persistent
 
+    # Delete /etc/factory entirely
+    rm -rf /etc/factory
+
+    # look for uninstall issues
+    for f in $(find $here/overlay -type f,l -printf "%P\n"); do
+        if [ -e /$f ] && diff /$f $here/overlay/$f &>/dev/null; then
+        {    
+            echo "WARNING: /$f is the same as $here/overlay/$f"
+            echo "You'll need to restore it manually with:"
+            echo "    dpkg -S /$file (to determine the source package name)"
+            echo "    apt install --reinstall -o Dpkg::Options::=--force-confask,confnew,confmiss <the-source-package>"
+            echo "If that doesn't work, look for generation script in /var/lib/dpkg/info/*.postint"
+        } >&2     
+        fi 
+        # delete residual backup    
+        rm -f /$f~
+    done
+       
     echo "###################"
     echo "Uninstall complete!"
-    exit 0
+    exit 0    
 fi
 
-! [ -f /etc/factory/install ] || die "$(cat /etc/factory/install) is currently installed, try '$0 -u' first"
+! [ -d /etc/factory ] || die "Already installed, try '$0 -u'"
 
 # Verify interfaces
-[[ -e /sys/class/net/$factory_interface ]] || die "Invalid network interface $factory_interface"
+[ -e /sys/class/net/$factory_interface ] || die "Invalid network interface $factory_interface"
 (($(cat /sys/class/net/$factory_interface/carrier 2>/dev/null))) || die "$factory_interface must be connected!"
 
-[[ -e /sys/class/net/$dut_interface ]] || die "Invalid network interface $dut_interface"
+[ -e /sys/class/net/$dut_interface ] || die "Invalid network interface $dut_interface"
 ! (($(cat /sys/class/net/$dut_interface/carrier 2>/dev/null))) || die "$dut_interface must not be connected!"
 
 # Install packages
 export DEBIAN_FRONTEND=noninteractive
 apt update
 apt upgrade
-apt install -y apache2 arping curl dnsmasq htop iptables-persistent links mlocate net-tools postgresql psmisc python-psycogreen resolvconf smartmontools sudo sysstat tcpdump tmux vim
+# mandatory
+apt install -y apache2 curl dnsmasq iptables-persistent postgresql python-psycogreen resolvconf sudo
+# extras
+apt install -y arping links mlocate net-tools psmisc smartmontools sysstat tcpdump tmux vim
 
 # Copy overlay files to root, backup existing
-for file in $(find $here/overlay -type f,l -printf "%P\n"); do
+for f in $(find $here/overlay -type f,l -printf "%P\n"); do
 
     # create directory if needed
-    [[ -d /${file%/*} ]] || mkdir -v -p /${file%/*}
+    [ -d /${f%/*} ] || mkdir -v -p /${f%/*}
 
-    # copy with backup
-    cp -v -P -b $here/overlay/$file /$file
+    # if file already exists, make a backup
+    ! [ -e /$f ] || cp -vP /$f /$f~
 
-    # also try to files
-    [ -h /$file ] ||
+    cp -vP $here/overlay/$f /$f
+
+    # rewrite special tags
+    [ -h /$f ] ||
     sed -i "s/FACTORY_INTERFACE/$factory_interface/g;
             s/DUT_INTERFACE/$dut_interface/g;
             s/DUT_IP/$dut_ip/g;
             s/DUT_NET/${dut_ip%.*}.*/g;
-            s/ORGANIZATION/$organization/g;" /$file
+            s/ORGANIZATION/$organization/g;" /$f
+
 done
 
+# allow uninstall after this point
 git rev-parse HEAD --abbrev-ref HEAD > /etc/factory/installed
 
 # Fix permissions
@@ -127,6 +151,8 @@ iptables-save > /etc/iptables/rules.v4
 ip6tables -F # flush everything
 ip6tables -P INPUT DROP
 ip6tables-save > /etc/iptables/rules.v6
+
+systemctl enable netfilter-persistent
 
 # configure dnsmasq
 ifup $dut_interface
