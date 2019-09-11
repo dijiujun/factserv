@@ -21,11 +21,12 @@ def fileinfo(buildid):
 try:
 
     # return form with specified values, buildid, comment, phase1[50], phase2[50], phase3[50], phase4[50]
+    # allow build id entry only if not currently defined
     def makeform(row):
         row=escape(list(row) if row else [None for n in range(2 + maxstations*4)])
         return table(("form",
                       [
-                          ["Build ID",             "<input name=buildid type=text value='%s'>" % escape(row[0])],
+                          ["Build ID",            "<input name=buildid type=text>" if row[0] == "" else escape(row[0])],
                           ["Phase 1 stations",    ''.join("<input name=phase1-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*0]) for n in range(1,maxstations+1))],
                           ["Phase 2 stations",    ''.join("<input name=phase2-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*1]) for n in range(1,maxstations+1))],
                           ["Phase 3 stations",    ''.join("<input name=phase3-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*2]) for n in range(1,maxstations+1))],
@@ -33,20 +34,22 @@ try:
                           ["Comment",              "<input name=comment type=text value='%s'>" % escape(row[1])]
                       ])); 
 
-    # return list of values created by the above form
-    def formvalues(form):
-        return tuple( [form.getvalue("buildid")]+
-                      [form.getvalue("comment")]+
-                      [form.getvalue("phase1-%d" % x) for x in range(1,maxstations+1)]+
-                      [form.getvalue("phase2-%d" % x) for x in range(1,maxstations+1)]+
-                      [form.getvalue("phase3-%d" % x) for x in range(1,maxstations+1)]+
-                      [form.getvalue("phase4-%d" % x) for x in range(1,maxstations+1)] )
+    # return validated list of (buildid, comment, phase1[], phase2[], phase3[], phase4[]) from the submitted form
+    def getvalues(form):
+        if "buildid" in form:
+            buildid=form.getvalue("buildid", default="").strip()
+            if buildid=="": raise Exception("Must specify a build ID")
+            s=re.search('[^-_.a-zA-Z0-9]',buildid)
+            if s: raise Exception("Build ID cannot contain '%s'" % s.group())
+        else:
+            buildid=""        
 
-    def validate(form):
-        p1=[int(s) for s in (form.getvalue("phase1-%d" % n) for n in range(1,maxstations+1)) if s is not None]
-        p2=[int(s) for s in (form.getvalue("phase2-%d" % n) for n in range(1,maxstations+1)) if s is not None]
-        p3=[int(s) for s in (form.getvalue("phase3-%d" % n) for n in range(1,maxstations+1)) if s is not None]
-        p4=[int(s) for s in (form.getvalue("phase4-%d" % n) for n in range(1,maxstations+1)) if s is not None]
+        comment=' '.join(form.getvalue("comment", default="").strip().split(''))
+        p1=sorted([int(s) for s in (form.getvalue("phase1-%d" % n) for n in range(1,maxstations+1)) if s is not None])
+        p2=sorted([int(s) for s in (form.getvalue("phase2-%d" % n) for n in range(1,maxstations+1)) if s is not None])
+        p3=sorted([int(s) for s in (form.getvalue("phase3-%d" % n) for n in range(1,maxstations+1)) if s is not None])
+        p4=sorted([int(s) for s in (form.getvalue("phase4-%d" % n) for n in range(1,maxstations+1)) if s is not None])
+
         if not len(p1):
             raise Exception("Must specify at least one phase 1 test station")
 
@@ -59,6 +62,9 @@ try:
         for n in tuple(p1+p2+p3+p4):
             if n < 0 or n > 200:
                 raise Exception("Test station must be 0 to 200")
+
+        # merge all into a list of 2+(4*maxstations) strings/Nones
+        return tuple([buildid, comment] + sum([[str(x) for x in p]+[None for x in xrange(len(p),maxstations)] for p in [p1,p2,p3,p4]],[])) 
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
@@ -80,17 +86,18 @@ try:
                 "<button name=action value=none>Cancel</button>" +
                 "</form>" )
         elif action[0] == 'insert':
-            validate(form)
             cur.execute("insert into builds (buildid, comment " +
                         "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +
                         "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
                         "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
                         "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +
-                        ") values (%s," + "%s,"*maxstations + "%s,"*maxstations + "%s,"*maxstations + "%s,"*maxstations + "%s)", formvalues(form))
+                        ") values (" + 
+                        ",".join(["%s"]*(2+(maxstations*4))) + 
+                        ")", getvalues(form))
             conn.commit()
         elif action[0] == "del":
             content = ("<form method=get>Really delete build ID '%s'? "% action[1] +
-                       "<button name=action value='really=%s'>Yes</button>" % action[1] +
+                       "<button name=action value='really=%s'>Yes</button>" % escape(action[1]) +
                        "<button name=action value=none>No</button>"+
                        "</form>")
         elif action[0] == "really":
@@ -107,7 +114,7 @@ try:
             content = ("<form method=get>" + 
                        makeform(row) + 
                        "<p>" +
-                       "<button name=action value='update=%s'>Update</button>" % row[0] +
+                       "<button name=action value='update=%s'>Update</button>" % escape(row[0]) +
                        "<button name=action value=none>Cancel</button>" +
                        "</form>")
         elif action[0] == "clone":
@@ -125,13 +132,13 @@ try:
                        "<button name=action value=none>Cancel</button>" +
                        "</form>")
         elif action[0] == 'update':
-            validate(form)
-            cur.execute("update builds set buildid=%s, comment=%s" +
+            values=getvalues(form)
+            cur.execute("update builds set comment=%s" +
                         "".join(", phase1[%d]=%%s" % x for x in range(1,maxstations+1)) +
                         "".join(", phase2[%d]=%%s" % x for x in range(1,maxstations+1)) +
                         "".join(", phase3[%d]=%%s" % x for x in range(1,maxstations+1)) +
                         "".join(", phase4[%d]=%%s" % x for x in range(1,maxstations+1)) +
-                        " where buildid=%s", formvalues(form)+(action[1],))
+                        " where buildid=%s", values[1:]+(action[1],))
             conn.commit()
         else:
             raise Exception("Invalid action = %s %s" % tuple(action));

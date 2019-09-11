@@ -25,6 +25,19 @@ try:
 
     content=None
 
+    def getvalues(form):
+        if 'station' in form:
+            station=int(form.getvalue('station'))
+        else:
+            station = None    
+        mac=form.getvalue('mac',default="").strip()
+        if mac == "": raise Exception("Must provide a MAC address")
+        fixture=' '.join(form.getvalue('fixture',default='').strip().split())
+        s=re.search('[^-_.a-zA-Z0-9]', fixture)
+        if s: raise Exception("Fixture cannot contain '%s'" % s.group())
+        comment=' '.join(form.getvalue('comment',default='').strip().split())
+        return (station, mac, fixture, comment)
+
     if 'action' in form:
         action=[form.getvalue('action'), None]
         if '=' in action[0]: action = form.getvalue('action').split('=',1)
@@ -43,14 +56,13 @@ try:
                         "<button name=action value=none>Cancel</button>" +
                         "</form>")
         elif action[0] == 'insert':
-                cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)',
-                    (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment')))
+                cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)', getvalues(form))
                 conn.commit()
                 dnsmasq()
         elif action[0] == 'del':
             content = ("<form method=get>" +
-                       "Really delete station %s?&nbsp;" % action[1] +
-                       "<button name=action value='really=%s'>Yes</button>" % action[1] +
+                       "Really delete station %s?&nbsp;" % escape(action[1]) +
+                       "<button name=action value='really=%s'>Yes</button>" % escape(action[1]) +
                        "<button name=action value=none>No</button>"+
                        "</form>" )
         elif action[0] == 'really':
@@ -63,7 +75,7 @@ try:
             content = ("<form method=get>" +
                         table(("form",
                         [
-                            [ "Station ID",  "<input name=station type=text value='%s'>" % station ],
+                            [ "Station ID",  station ],
                             [ "Station MAC", "<input name=mac     type=text value='%s'>" % mac ],
                             [ "Fixture",     "<input name=fixture type=text value='%s'>" % fixture ],
                             [ "Comment",     "<input name=comment type=text value='%s'>" % comment ]
@@ -72,8 +84,7 @@ try:
                         "<button name=action value='none'>Cancel</button>" +
                         "</form>")
         elif action[0] == 'update':
-            cur.execute('update stations set station=%s, mac=%s, fixture=%s, comment=%s where station=%s',
-                (form.getvalue('station'),form.getvalue('mac'),form.getvalue('fixture'),form.getvalue('comment'),action[1]))
+            cur.execute('update stations set mac=%s, fixture=%s, comment=%s where station=%s', getvalues(form)[1:]+(action[1],))
             conn.commit()
             dnsmasq()
         else:
