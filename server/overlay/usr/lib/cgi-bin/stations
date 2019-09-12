@@ -32,15 +32,15 @@ try:
             station = None    
         mac=form.getvalue('mac',default="").strip()
         if mac == "": raise Exception("Must provide a MAC address")
-        fixture=' '.join(form.getvalue('fixture',default='').strip().split())
+        fixture=' '.join(form.getvalue('fixture',default='').split())
         s=re.search('[^-_.a-zA-Z0-9]', fixture)
         if s: raise Exception("Fixture cannot contain '%s'" % s.group())
-        comment=' '.join(form.getvalue('comment',default='').strip().split())
+        comment=' '.join(form.getvalue('comment',default='').split())
         return (station, mac, fixture, comment)
 
     if 'action' in form:
         action=[form.getvalue('action'), None]
-        if '=' in action[0]: action = form.getvalue('action').split('=',1)
+        if '=' in action[0]: action=action[0].split('=',1)
         if action[0] == 'none':
             pass
         elif action[0] == 'new':
@@ -53,7 +53,6 @@ try:
                             [ "Comment",     "<input name=comment type=text>" ]
                         ]))+
                         "<button name=action value='insert'>Save</button>" +
-                        "<button name=action value=none>Cancel</button>" +
                         "</form>")
         elif action[0] == 'insert':
                 cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)', getvalues(form))
@@ -81,7 +80,6 @@ try:
                             [ "Comment",     "<input name=comment type=text value='%s'>" % comment ]
                         ])) +
                         "<button name=action value='update=%s'>Save</button>" % station +
-                        "<button name=action value='none'>Cancel</button>" +
                         "</form>")
         elif action[0] == 'update':
             cur.execute('update stations set mac=%s, fixture=%s, comment=%s where station=%s', getvalues(form)[1:]+(action[1],))
