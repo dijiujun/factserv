@@ -211,7 +211,7 @@ try:
                    "Test      : %s\n" % testname +
                ("Loop      : %d/%d" % tuple(pushed[-1]) if len(pushed) else ""),
                    bg="purple" if failing else "blue")
-            testid=factory("starttest", {"deviceid":deviceID, "testname":testname, "command":command})
+            testid=factory("starttest", {"deviceid":deviceID, "testname":testname + (" %d/%d" % tuple(pushed[-1]) if len(pushed) else ""), "command":command})
             status, stdout=perform(command, timeout)
             factory("endtest", {"deviceid":deviceID, "testid":testid, "status":status, "stdout":stdout})
             if status:
