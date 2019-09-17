@@ -114,7 +114,7 @@ try:
                  "</form>"+
                  "<hr>")
         cur.execute("select deviceid, buildid, date_trunc('seconds',created), date_trunc('seconds',updated), state, phase, station, " +
-                    "(state='TESTING' or state='FAILING') and updated < now()-interval '10 minutes' as stale, " +
+                    "(state='TESTING' or state='FAILING') and updated < uct()-interval '10 minutes' as stale, " +
                     "state='PASSED' or state='FAILED' as idle " +
                     "from devices "+ 
                     ("where " + "and ".join(where) + " " if where else "") + 

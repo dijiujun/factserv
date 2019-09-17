@@ -46,7 +46,7 @@ try:
                    end as elapsed,
                    substring(t.testname,1,50) as testname, t.status,
                    d.state, d.phase, d.buildid,
-                   t.ended is null and t.started < now() - interval '10 minutes' as stale
+                   t.ended is null and t.started < uct() - interval '10 minutes' as stale
             from tests as t
             join (select station, max(started) as started from tests group by station) as j on t.station=j.station and t.started=j.started
             join devices as d on t.deviceid = d.deviceid and t.station=d.station

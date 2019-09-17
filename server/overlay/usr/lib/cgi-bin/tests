@@ -117,7 +117,7 @@ try:
                  "<hr>")
 
         cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, substring(testname,1,50), substring(command,1,50), status, substring(split_part(stdout,E'\n',1),1,50), " +
-                    "ended is NULL and started < now()-interval '10 minutes' as stale " +
+                    "ended is NULL and started < uct()-interval '10 minutes' as stale " +
                     "from tests " +
                     ("where " + " and ".join(where) if where else "") +
                     " order by id %s limit %s" % (sort, limit))

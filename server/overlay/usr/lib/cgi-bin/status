@@ -51,7 +51,7 @@ try:
                                         if (state == "TESTING" || state == "FAILING") {
                                             s+=result[r]['testname'];
                                             let diff=Math.ceil(result[r]["elapsed"]);
-                                            if (diff > 3)
+                                            if (diff > 30)
                                             {
                                                 s += " (";
                                                 if (diff >= 86400)
