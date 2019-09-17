@@ -2,7 +2,7 @@
 
 # Configure test station ID vs MAC address and restart dnsmasq.
 
-import traceback, re, cgi, sys, psycopg2, os, base64, datetime
+import traceback, re, sys, psycopg2, os, datetime
 from util import *
 
 authenticate("Supervisor", "supervisor:superx5")
@@ -68,7 +68,8 @@ try:
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
-    form=cgi.FieldStorage();
+
+    form=submitted()
     
     content=None
 

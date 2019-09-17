@@ -1,6 +1,13 @@
 # utilities for cgi programs
 
-import sys, os, base64, psycopg2
+import sys, os, base64, psycopg2, cgi
+
+# subclass cgi.FieldStorage, force getvalue text to legal ascii
+class submitted(cgi.FieldStorage):
+    def getvalue(self, key, default=None):
+        v=cgi.FieldStorage.getvalue(self, key, default)
+        if isinstance(v,str): v=v.replace('\x00','').decode('ascii','ignore').encode('ascii')
+        return v
 
 # return string, list, or tuple with html meta-characters escaped
 def escape(ss, align=False):

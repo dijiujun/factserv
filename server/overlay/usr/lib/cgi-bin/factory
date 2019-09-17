@@ -11,11 +11,18 @@ try:
     # print "Content-type: text/plain\n" # enable for debug only
 
     me = sys.argv[0].split("/")[-1]
-    form = cgi.FieldStorage()
 
     conn = psycopg2.connect("dbname=factory")
     cur = conn.cursor()
 
+    # subclass cgi.FieldStorage, force getvalue text to legal ascii
+    class submitted(cgi.FieldStorage):
+        def getvalue(self, key, default=None):
+            v=cgi.FieldStorage.getvalue(self, key, default)
+            if isinstance(v,str): v=v.replace('\x00','').decode('ascii','ignore').encode('ascii')
+            return v
+    form = submitted()
+    
     for l in open("/etc/factory/config"):
         k=l.split('=',2)
         if k[0] == "dut_ip":

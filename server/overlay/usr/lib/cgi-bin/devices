@@ -1,17 +1,17 @@
 #!/usr/bin/python2
 
-import traceback, re, cgi, sys, psycopg2, os, base64
-from urllib import urlencode
+import traceback, sys, psycopg2, os 
 from util import *
 
 #authenticate("Technician","tech:techx4")
 
 try:
-
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
-    form=cgi.FieldStorage()
+
     content=""
+
+    form=submitted()
 
     if "action" in form:
         action=[form.getvalue('action'), None]

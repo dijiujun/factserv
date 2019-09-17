@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 
-import traceback, re, cgi, sys, psycopg2, os, base64
+import traceback, sys, os, re, psycopg2
 from util import *
 
 #authenticate("Technician","tech:techx4")
@@ -10,7 +10,8 @@ class BadSubmit(Exception): pass
 try:
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
-    form=cgi.FieldStorage();
+
+    form=submitted()
 
     drill=form.getvalue("drill")
     if drill:
