@@ -8,12 +8,6 @@ try:
 
     content="""
         <table class=data id=main> </table>
-        <hr>
-        <div class=footer>
-            <form action='/'><button>Home</button></form>
-            <span>&nbsp;</span>
-            <span id=now></span>
-        </div>
 
         <script>
             function update(url)
@@ -91,14 +85,6 @@ try:
                     document.getElementById("main").innerHTML = s;
                 });
 
-            //    fetch("./query?what=now")
-            //    .then(function(response) {
-            //        return response.json();
-            //    })
-            //    .then(function(result) {
-            //        document.getElementById("now").innerHTML="Server time is "+result[0]["now"]+" UCT";
-            //    });
-
                 setTimeout(update,1000);
             }
             window.onload=update;
@@ -106,7 +92,7 @@ try:
     """
 
     # print generated content
-    print html("Current Test Status", None, content)
+    print html("Test Status", None, content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

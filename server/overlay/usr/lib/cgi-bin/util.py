@@ -67,8 +67,7 @@ def tick_footer():
     return """
         <hr>
         <div class=footer>
-            <form action='/'><button>Home</button></form>
-            <span>&nbsp; Server time is """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT &nbsp;</span> 
+            <span>Retrieved """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT&nbsp;</span> 
             <span id=ticks></span>
         </div>
         <script>
@@ -107,11 +106,22 @@ def html(title, style, content):
     s=("\n".join(headers) + "\n\n" + "<!DOCTYPE html>\n" +
        """<html>
           <head>
+          <nav>        
+          <ul>
+              <li><a href="/cgi-bin/status">Test Status</a></li>
+              <li><a href="/cgi-bin/tests">Test History</a></li>
+              <li><a href="/cgi-bin/devices">Device History</a></li>
+              <li><a href="/cgi-bin/stations">Station Manager</a></li>
+              <li><a href="/cgi-bin/builds">Build Manager</a></li>
+              <li><a href="/index.html">Home</a></li>
+          </ul>
+          </nav>
           <title>""" +  title + """</title>
           <link href='/style.css' rel='stylesheet' type='text/css'/>
           <style>""" + (style or "") + """</style>
           </head> 
           <body>
+
           <h2>""" + title + """</h2> 
           """ + content + """
           </body>
