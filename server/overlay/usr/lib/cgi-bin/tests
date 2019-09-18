@@ -55,8 +55,8 @@ try:
         stdout=form.getvalue('stdout')
         stdout_type=form.getvalue('stdout_type') or "~"
 
-        sort=form.getvalue('sort') or 'desc';
-        limit=form.getvalue('limit') or "100";
+        sort=form.getvalue('sort') or 'desc'
+        limit=form.getvalue('limit') or "100"
 
         where=[]
 
@@ -140,7 +140,7 @@ try:
                             ))
 
     # print generated content
-    print html("Test History", 
+    print html("Test History",
                """
                 table.drill { border-collapse: collapse; }
                 table.drill td { border: solid 1px; }

@@ -30,7 +30,7 @@ try:
         if 'station' in form:
             station=int(form.getvalue('station'))
         else:
-            station = None    
+            station = None
         mac=form.getvalue('mac',default="").strip()
         if mac == "": raise Exception("Must provide a MAC address")
         fixture=' '.join(form.getvalue('fixture',default='').split())
@@ -68,7 +68,7 @@ try:
         elif action[0] == 'really':
                 cur.execute('delete from stations where station=%s', (action[1],))
                 conn.commit()
-                dnsmasq() 
+                dnsmasq()
         elif action[0] == 'edit':
             cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
             station, mac, fixture, comment = escape(cur.fetchone())
@@ -96,10 +96,10 @@ try:
         else:
             rows=cur.fetchall()
             content = table(("data",
-                              [ 
-                                  ["Station","MAC","Fixture","Comment","&nbsp;"] 
+                              [
+                                  ["Station","MAC","Fixture","Comment","&nbsp;"]
                               ] +
-                              [ ( escape(list(row)) + 
+                              [ ( escape(list(row)) +
                                   [ ("<form method=get>" +
                                      "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) +
                                      "<button name=action value='del=%s'>Delete</button>" % escape(row[0]) +
@@ -112,8 +112,8 @@ try:
         content += "<p><form method=get><button name=action value=new>New station</button></form>"
 
     # print generated content
-    print html("Station Manager", 
-               "table.data tr:nth-child(even) { background: #CCC; }", 
+    print html("Station Manager",
+               "table.data tr:nth-child(even) { background: #CCCCCC; }",
                content + tick_footer())
 
 except:

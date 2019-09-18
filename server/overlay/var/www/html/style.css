@@ -18,9 +18,15 @@ table tr.STALE,    table td.STALE,     table tr.STALE a,    table td.STALE a    
 button.click { border: 1px outset darkgrey; background-color: white; padding: 0; height:12px; width:12px; border-radius:12px; vertical-align: super }
 button.click:hover { background-color: grey; }
 
-div.footer { float:left; } 
+div.footer { float:left; }
 div.footer form { float: left; }
 div.footer button { font-size: 8px; float:left; }
 div.footer span { font-size: 12px; float:left; }
 
 input { font-family:monospace }
+
+nav ul { list-style-type: none; margin: 0; padding: 0; overflow: hidden; background-color: black; }
+nav li { float: left; border-right: 1px solid white; }
+nav li:last-child { float: right; border-right: none; border-left: 1px solid white; }
+nav li a { display: block; color: white; text-align: center; padding: 4px 16px; text-decoration: none; }
+nav li a:hover { background-color: gray }

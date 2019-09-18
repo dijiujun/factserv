@@ -22,7 +22,7 @@ try:
             if isinstance(v,str): v=v.replace('\x00','').decode('ascii','ignore').encode('ascii')
             return v
     form = submitted()
-    
+
     for l in open("/etc/factory/config"):
         k=l.split('=',2)
         if k[0] == "dut_ip":
@@ -67,7 +67,7 @@ try:
 
     ok = None
 
-    service=require("service")	
+    service=require("service")
 
     if service == "download":
         # Validate given buildID and redirect to a tarball with that name

@@ -1,12 +1,12 @@
 # utilities for cgi programs
 
-import sys, os, base64, psycopg2, cgi
+import sys, os, base64, psycopg2, cgi, string
 
 # subclass cgi.FieldStorage, force getvalue text to legal ascii
 class submitted(cgi.FieldStorage):
     def getvalue(self, key, default=None):
         v=cgi.FieldStorage.getvalue(self, key, default)
-        if isinstance(v,str): v=v.replace('\x00','').decode('ascii','ignore').encode('ascii')
+        if isinstance(v,str): v=filter(lambda c: c in string.printable, v)
         return v
 
 # return string, list, or tuple with html meta-characters escaped
@@ -23,7 +23,7 @@ def select(name, options, selected):
     for o in options:
         s += "<option value='%s' %s>%s</option>" % (escape(o), "selected" if o == selected else "", escape(options[o]))
     s += "</select>"
-    return s;
+    return s
 
 # generate html table structure
 # rows is a list, or a tuple pf (table_class, rows)
@@ -63,24 +63,24 @@ def tick_footer():
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
     cur.execute("select uct()")
-    now=cur.fetchone();
+    now=cur.fetchone()
     return """
         <hr>
         <div class=footer>
-            <span>Retrieved """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT&nbsp;</span> 
+            <span>Retrieved """ + now[0].strftime("%Y-%m-%d %H:%M:%S") + """ UCT&nbsp;</span>
             <span id=ticks></span>
         </div>
         <script>
-        let start=new Date; 
-        function tick() 
+        let start=new Date;
+        function tick()
         {
             let diff=Math.floor((new Date - start)/1000);
-            t=''; 
-            if (diff >= 86400) 
+            t='';
+            if (diff >= 86400)
             {
                 d = Math.floor(diff / 86400);
                 t+=d+((d==1)?' day,':' days, ');
-            } 
+            }
             if (diff >= 3600)
             {
                 h =Math.floor((diff/ 3600) % 24);
@@ -90,12 +90,12 @@ def tick_footer():
             {
                 m=Math.floor((diff / 60) % 60);
                 t+=m+((m==1)?' minute, ':' minutes, ');
-            } 
+            }
             s=Math.floor(diff % 60);
             t+=s+((s==1)?' second':' seconds');
             document.getElementById('ticks').innerHTML = "("+t+" ago)"
-        }       
-        ticker=setInterval(tick,1000);  
+        }
+        ticker=setInterval(tick,1000);
         </script>
     """
 
@@ -106,7 +106,7 @@ def html(title, style, content):
     s=("\n".join(headers) + "\n\n" + "<!DOCTYPE html>\n" +
        """<html>
           <head>
-          <nav>        
+          <nav>
           <ul>
               <li><a href="/cgi-bin/status">Test Status</a></li>
               <li><a href="/cgi-bin/tests">Test History</a></li>
@@ -119,10 +119,10 @@ def html(title, style, content):
           <title>""" +  title + """</title>
           <link href='/style.css' rel='stylesheet' type='text/css'/>
           <style>""" + (style or "") + """</style>
-          </head> 
+          </head>
           <body>
 
-          <h2>""" + title + """</h2> 
+          <h2>""" + title + """</h2>
           """ + content + """
           </body>
           </html>""")

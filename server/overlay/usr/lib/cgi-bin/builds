@@ -9,13 +9,13 @@ authenticate("Supervisor", "supervisor:superx5")
 
 maxstations=50
 
-# return 
+# return
 def fileinfo(buildid):
     tarball="/var/www/html/downloads/%s.tar.gz" % buildid
-    try: 
+    try:
         (size, mtime)=os.stat(tarball)[6:9:2]
         return "<div style='color:white; background-color:green'>%s: %d bytes</div>" % (datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"), size)
-    except:  
+    except:
         return "<div style='color:white; background-color:red'>NO FILE</div>"
 
 try:
@@ -32,7 +32,7 @@ try:
                           ["Phase 3 stations",    ''.join("<input name=phase3-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*2]) for n in range(1,maxstations+1))],
                           ["Phase 4 stations",    ''.join("<input name=phase4-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*3]) for n in range(1,maxstations+1))],
                           ["Comment",              "<input name=comment type=text value='%s'>" % escape(row[1])]
-                      ])); 
+                      ]))
 
     # return validated list of (buildid, comment, phase1[], phase2[], phase3[], phase4[]) from the submitted form
     def getvalues(form):
@@ -42,7 +42,7 @@ try:
             s=re.search('[^-_.a-zA-Z0-9]',buildid)
             if s: raise Exception("Build ID cannot contain '%s'" % s.group())
         else:
-            buildid=""        
+            buildid=""
 
         comment=' '.join(form.getvalue("comment", default="").split())
         p1=sorted([int(s) for s in (form.getvalue("phase1-%d" % n) for n in range(1,maxstations+1)) if s is not None])
@@ -64,13 +64,13 @@ try:
                 raise Exception("Test station must be 0 to 200")
 
         # merge all into a list of 2+(4*maxstations) strings/Nones
-        return tuple([buildid, comment] + sum([[str(x) for x in p]+[None for x in xrange(len(p),maxstations)] for p in [p1,p2,p3,p4]],[])) 
+        return tuple([buildid, comment] + sum([[str(x) for x in p]+[None for x in xrange(len(p),maxstations)] for p in [p1,p2,p3,p4]],[]))
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
 
     form=submitted()
-    
+
     content=None
 
     if 'action' in form:
@@ -80,7 +80,7 @@ try:
             pass
         elif action[0] == 'new':
             content = (
-                "<form method=get>" + 
+                "<form method=get>" +
                 makeform(None) +
                 "<p>" +
                 "<button name=action value=insert>Save</button>" +
@@ -91,8 +91,8 @@ try:
                         "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
                         "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
                         "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +
-                        ") values (" + 
-                        ",".join(["%s"]*(2+(maxstations*4))) + 
+                        ") values (" +
+                        ",".join(["%s"]*(2+(maxstations*4))) +
                         ")", getvalues(form))
             conn.commit()
         elif action[0] == "del":
@@ -101,7 +101,7 @@ try:
                        "<button name=action value=none>No</button>"+
                        "</form>")
         elif action[0] == "really":
-            cur.execute("delete from builds where buildid=%s", (action[1],));
+            cur.execute("delete from builds where buildid=%s", (action[1],))
             conn.commit()
         elif action[0] == "edit":
             cur.execute("select buildid, comment " +
@@ -110,9 +110,9 @@ try:
                         "".join(", phase3[%d]" % n for n in range(1,maxstations+1)) +\
                         "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +\
                         " from builds where buildid = %s", (action[1],))
-            row = cur.fetchone();
-            content = ("<form method=get>" + 
-                       makeform(row) + 
+            row = cur.fetchone()
+            content = ("<form method=get>" +
+                       makeform(row) +
                        "<p>" +
                        "<button name=action value='update=%s'>Update</button>" % escape(row[0]) +
                        "</form>")
@@ -123,10 +123,10 @@ try:
                         "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +\
                         "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +\
                         " from builds where buildid = %s", (action[1],))
-            row = cur.fetchone();
+            row = cur.fetchone()
             content = ("<form method=get>" +
                        makeform(row) +
-                       "<p>" + 
+                       "<p>" +
                        "<button name=action value=insert>Save</button>" +
                        "</form>")
         elif action[0] == 'update':
@@ -139,12 +139,12 @@ try:
                         " where buildid=%s", values[1:]+(action[1],))
             conn.commit()
         else:
-            raise Exception("Invalid action = %s %s" % tuple(action));
+            raise Exception("Invalid action = %s %s" % tuple(action))
 
     if not content:
         # here, generate thge default page content
 
-        cur.execute("select buildid, comment" +  
+        cur.execute("select buildid, comment" +
                     "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +
                     "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
                     "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
@@ -159,26 +159,26 @@ try:
                              [
                                  ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Comment", "Tarball", "&nbsp;"]
                              ] +
-                             [ [ row[0], 
+                             [ [ row[0],
                                  ", ".join(" ".join(escape(row[2:2+maxstations])).split()),
                                  ", ".join(" ".join(escape(row[52:52+maxstations])).split()),
-                                 ", ".join(" ".join(escape(row[102:102+maxstations])).split()), 
-                                 ", ".join(" ".join(escape(row[152:152+maxstations])).split()), 
+                                 ", ".join(" ".join(escape(row[102:102+maxstations])).split()),
+                                 ", ".join(" ".join(escape(row[152:152+maxstations])).split()),
                                  row[1],
                                  fileinfo(row[0]),
                                  ( "<form method=get>" +
-                                   "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) + 
-                                   "<button name=action value='del=%s'>Del</button>" % escape(row[0]) + 
+                                   "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) +
+                                   "<button name=action value='del=%s'>Del</button>" % escape(row[0]) +
                                    "<button name=action value='clone=%s'>Clone</button>" % escape(row[0]) +
                                    "</form>" )
                                ] for row in rows
                              ]
                             ))
-        content += "<p><form method=get><button name=action value=new>New build</button></form>"         
- 
+        content += "<p><form method=get><button name=action value=new>New build</button></form>"
+
     # print generated content
-    print html("Build Manager", 
-               "table.data tr:nth-child(even) { background: #CCC; }", 
+    print html("Build Manager",
+               "table.data tr:nth-child(even) { background: #CCCCCC; }",
                content + tick_footer())
 
 except Exception as e:
