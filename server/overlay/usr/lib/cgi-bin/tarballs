@@ -1,0 +1,66 @@
+#!/usr/bin/python2
+
+# Manage tarballs
+
+base="/var/www/html/downloads"
+
+import traceback, re, cgi, sys, psycopg2, os, datetime, glob, stat
+from util import *
+
+authenticate("Supervisor", "supervisor:superx5")
+
+# return
+def fileinfo(buildid):
+    tarball="/var/www/html/downloads/%s.tar.gz" % buildid
+    try:
+        (size, mtime)=os.stat(tarball)[6:9:2]
+        return "<div style='color:white; background-color:green'>%s: %d bytes</div>" % (datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"), size)
+    except:
+        return "<div style='color:white; background-color:red'>NO FILE</div>"
+
+try:
+
+    conn=psycopg2.connect('dbname=factory')
+    cur=conn.cursor()
+
+    files=[]
+    for f in glob.glob(base+"/*.tar.gz"):
+        cur.execute("select 1 from builds where buildid=%s",(f.rstrip(".tar.gz"),))
+        fstat=os.stat(f)
+        if stat.S_ISREG(fstat.st_mode):
+            filename=os.path.basename(f)
+            buildid=filename[:-7]
+            stamp=str(datetime.datetime.fromtimestamp(int(fstat.st_mtime)))
+            size='{:,}'.format(fstat.st_size)
+            cur.execute("select array_to_string(array(select distinct b.s from (select unnest(phase1||phase2||phase3||phase4) as s from builds where buildid=%s) as b order by b.s asc),', ')",(buildid,))
+            stations=cur.fetchone()[0]
+
+            files += [[click(filename, "action=builds", {"action":"edit=%s"%buildid}) if stations else filename,
+                       stamp,
+                       size,
+                       stations or "Unused" ]]
+
+    if not len(files):
+        content="No files!"
+    else:
+        content = table(("data", [ ["File", "Modified", "Bytes", "Stations", "&nbsp;" ] ]+
+                                  [ f +
+                                  [ "<form method=get>" +
+                                    "<button name=action value='del=%s'>Delete</button>" % escape(f[0]) +
+                                    "<button name=action value='rename=%s'>Rename</button>" % escape(f[0]) +
+                                    "</form>" ]
+                                    for f in files]))
+
+    content += "<p><form method=get><button name=action value=upload>Upload</button></form>"
+
+    # print generated content
+    print html("Tarball Manager",
+               "table.data tr:nth-child(even) { background: #CCC; }",
+               content + tick_footer())
+
+except Exception as e:
+    print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
+    print
+    traceback.print_exc(file = sys.stdout)
+    print
+    #for k in sorted(form.keys()): print k,"=",form.getvalue(k)

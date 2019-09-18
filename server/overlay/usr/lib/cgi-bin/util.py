@@ -52,11 +52,11 @@ def table(rows):
 
 # generate clickable button
 def click(label, action, params):
-    return ("<form method=get "+(action or "")+">"+
+    return ("<form style='float:left' method=get "+(action or "")+">"+
             "<button class=click type=submit></button>"+
             "".join("<input type=hidden name='%s' value='%s'>" % escape((n,v)) for n,v in params.items())+
-            "&nbsp;"+escape(label)+
-            "</form>")
+            "</form>"+
+            "&nbsp;"+escape(label))
 
 # footer shows home button, current server time and elapsed time
 def tick_footer():

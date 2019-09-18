@@ -7,7 +7,7 @@ from util import *
 try:
 
     content="""
-        <table class=data id=main> </table>
+        <table class=status id=main> </table>
 
         <script>
             function update(url)

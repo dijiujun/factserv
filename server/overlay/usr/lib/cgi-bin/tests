@@ -116,7 +116,7 @@ try:
                  "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
                  "<hr>")
 
-        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, substring(testname,1,50), substring(command,1,50), status, substring(split_part(stdout,E'\n',1),1,50), " +
+        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, split_part(stdout,E'\n',1), " +
                     "ended is NULL and started < uct()-interval '10 minutes' as stale " +
                     "from tests " +
                     ("where " + " and ".join(where) if where else "") +
