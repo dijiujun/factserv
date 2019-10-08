@@ -23,12 +23,20 @@ try:
             return v
     form = submitted()
 
+    # parse the config file
+    dut_ip=None
+    factory_id=None
     for l in open("/etc/factory/config"):
         k=l.split('=',2)
         if k[0] == "dut_ip":
             dut_ip=k[1].strip()
-            break
-    if not dut_ip: raise Exception("Can't find 'dut_ip' in /etc/factory/config")
+        elif k[0] == "factory_id":
+            v=k[1].strip()
+            factory_id=int(v)
+            assert 0 <= factory_id <= 255
+    if dut_ip is None: raise Exception("Can't find 'dut_ip' in /etc/factory/config")
+    if factory_id is None: raise Exception("Can't find 'factory_id' in /etc/factory/config")
+
 
     station = None
     try:
@@ -40,18 +48,18 @@ try:
         station = 0
         fixture = ""
     else:
-        prefix=".".join(k[1].split(".")[0:3])+"."
+        prefix=".".join(dut_ip.split(".")[0:3])+"."
         if not remote.startswith(prefix): raise Exception("Request from IP %s is not allowed (expecting prefix %s)" % (remote,prefix))
         station = remote.split(".")[3]
         cur.execute("select fixture from stations where station=%s", (station,))
-        if not cur.rowcount: raise Exception("Request from IP %s is not allowed (unknown test station)" % (remote,))
+        if not cur.rowcount: raise Exception("Request from IP %s is not allowed (unknown test station)" % remote)
         fixture = cur.fetchone()[0]
 
     # get specified parameter from form or die
     def require(p):
         v = form.getvalue(p)
-        if v is None: raise Exception("Requires param '%s'" % p)
-        return v
+        if v is None or v == ""'': raise Exception("Requires param '%s'" % p)
+        return v.strip()
 
     # vaildate buildid, return dict containing the builds table row
     # postgres array syntax is borked
@@ -59,7 +67,7 @@ try:
     # build["hasphaseX"] is true if phase X is enabled on *any* station
     def checkbuild(buildid):
         cur.execute("select %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), 0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL from builds where buildid=%s", (station, station, station, station, buildid))
-        if not cur.rowcount: raise Exception("Invalid buildid '%s'" % (buildid,))
+        if not cur.rowcount: raise Exception("Invalid buildid '%s'" % buildid)
         build={}
         build["phase1"],build["phase2"],build["phase3"],build["phase4"],build["hasphase2"],build["hasphase3"],build["hasphase4"]=cur.fetchone()
         if not (build["phase1"] or build["phase2"] or build["phase3"] or build["phase4"]): raise Exception("Buildid %s not enabled for station %s" % (buildid, station))
@@ -82,24 +90,28 @@ try:
             quit()
         raise Exception("No tarball for build ID '%s'" % buildid)
 
-    elif service == "newdevice":
-        # Validate that the given buildID is allowed to do phase 1 testing
-        # If device ID is also given, insert or update the entry in the deviceID table
+    elif service == "gendevice":
+        # Create a new device
+        # First check that the given buildID is allowed to do phase 1 testing
         buildid = require("buildid")
         build = checkbuild(buildid)
-        if not build["phase1"]: raise Exception("newdevice is disallowed for buildid %s on station %s" % (buildid,station))
+        if not build["phase1"]: raise Exception("New device is disallowed for buildid %s on station %s" % (buildid,station))
+        # Then return a theoretically unique 12-digit device ID in form "FFSSNNNNNNNN"
+        # Where:
+        #   FF is factory ID in hex (from the config file)
+        #   SS is station ID in hex (from the IP address)
+        #   NNNNNNNN is epoch time in hex (from the database uct())
+        # Assumes:
+        #   a) the server clock is correct, and
+        #   b) can't test two boards on the same test station in the same second
+        cur.execute("select floor(extract(epoch from uct()))")
+        ok="{:02X}{:02X}{:08X}".format(int(factory_id), int(station), int(cur.fetchone()[0]))
 
-        deviceid = form.getvalue("deviceid")
-        if deviceid:
-            # if deviceid is given, (re)init the device table for phase1
-            cur.execute("insert into devices (deviceid, buildid, station, state) values (%s, %s, %s, 'UNKNOWN') on conflict(deviceid) do update set buildid=%s, station=%s, state='UNKNOWN', phase=1",
-                        (deviceid, buildid, station, buildid, station))
-            conn.commit()
-        ok=""
-
-    elif service == "startdiag" or service == "startsession":
+    elif service == "startsession":
         # Start diagnostic session for given device.
-        # startdiag is deprecated, use startsession instead, which returns a sessionid to be used with endsession
+        # If the device is not currently known, insert into database and force phase1 (error if phase1 not allowed).
+        # Otherwise determine the highest number phase that can be run on the station.
+        # Returns sessionid and the phase
         deviceid = require("deviceid")
         buildid = require("buildid")
         build = checkbuild(buildid)
@@ -121,12 +133,9 @@ try:
             if phase == 1 and not build["phase1"]: raise Exception("can't perform phase %s or any predecessor for buildid %s on station %s" % (p, buildid, station))
             cur.execute("update devices set state='TESTING', phase=%s, station=%s, buildid=%s  where deviceid=%s", (phase, station, buildid, deviceid))
         # add an entry into the test table
-        if service == "startsession":
-            cur.execute("insert into tests (deviceid, station, phase, command, testname) values (%s, %s, %s, %s, %s) returning id", (deviceid, station, phase, "", "*** SESSION ***"))
-            ok="%d %s" % (phase, cur.fetchone()[0])
-        else:
-            ok="%d" % phase
+        cur.execute("insert into tests (deviceid, station, phase, command, testname) values (%s, %s, %s, %s, %s) returning id", (deviceid, station, phase, "", "*** SESSION ***"))
         conn.commit()
+        ok="%d %s" % (phase, cur.fetchone()[0])
 
     elif service == "starttest":
         # start a new test for specified deviceid, with command and test name strings, returns a test ID which is used to end the test
@@ -159,16 +168,17 @@ try:
         conn.commit()
         ok=""
 
-    elif service == "enddiag" or service == "endsession":
-        # End current diagnostic session for specified deviceid. If it's in the
-        # TESTING state then that means all tests passed, put it into the
-        # PASSED state if there are more phases left to do, or the COMPLETE
-        # state if all test phases have been performed.
-        # enddiag is deprecated, use endsession which requires a session ID and updates the SESSION entry in the tests table
+    elif service == "endsession":
+        # End current diagnostic session for specified deviceid.
+        # Expects the deviceID and the sessionID that was provided by startsession
+        # If the device is in the TESTING state then that means all tests
+        # passed, put it into the PASSED state if there are more phases left to
+        # do, or the COMPLETE state if all test phases have been performed.
         deviceid = require("deviceid")
+        sessionid = require("sessionid")
 
         cur.execute("select state, phase, buildid from devices where deviceid=%s", (deviceid,))
-        if not cur.rowcount: raise Exception("No record for deviceid %s" % (deviceid,))
+        if not cur.rowcount: raise Exception("No record for deviceid %s" % deviceid)
         state, phase, buildid = cur.fetchone()
 
         if state == "FAILING":
@@ -183,30 +193,31 @@ try:
             raise Exception("Expected deviceid %s state TESTING or FAILING, actual state is %s" % (deviceid, state))
         cur.execute("update devices set state=%s where deviceid=%s", (state, deviceid))
         conn.commit()
-        if service == "endsession":
-            sessionid=require("sessionid")
-            cur.execute("update tests set ended=uct(), status=%d where id=%s" % (-2 if state=="FAILED" else 0, sessionid))
-            conn.commit()
+
+        cur.execute("update tests set ended=uct(), status=%d where id=%s" % (-2 if state=="FAILED" else 0, sessionid))
+        conn.commit()
         ok="%s %s" % (state, phase)
 
     elif service == "setprovision":
         # write arbitrary value to provision table column p_<key> for specified deviceid
         deviceid = require("deviceid")
         key = require("key")
-        if not key.isalnum(): raise Exception("Invalid key '%s'" % (key,))
+        if not key.isalnum(): raise Exception("Invalid key '%s'" % key)
         key="p_"+key
         value = require("value")
-        cur.execute("insert into provisioned (deviceid, %s) values (%%s, %%s) on conflict(deviceid) do update set %s=%%s" % (key,key), (deviceid,value,value))
+        cur.execute(("insert into provisioned (deviceid, %s) values (%%s, %%s) on conflict(deviceid) do update set %s = %%s" % (key, key)), (deviceid,value,value))
+        conn.commit()
         ok=""
 
     elif service == "getprovision":
         # get provision table column p_<key> for specified deviceid
         deviceid = require("deviceid")
         key = require("key")
-        if not key.isalnum(): raise Exception("Invalid key '%s'" % (key,))
+        if not key.isalnum(): raise Exception("Invalid key '%s'" % key)
         key="p_"+key
-        cur.execute("select %s from provisioned where deviceid = %%s" % (key,),(deviceid,))
-        ok = cur.fetchone()[0]
+        cur.execute(("select %s from provisioned where deviceid = %%s" % key), (deviceid,))
+        ok = ""
+        if cur.rowcount: ok = cur.fetchone()[0]
 
     elif service == "fixture":
         # This is invoked by pionic during startup, if a string is returned
@@ -215,14 +226,14 @@ try:
         ok=fixture
 
     else:
-        raise Exception("Invalid service '%s'" % (service,))
+        raise Exception("Invalid service '%s'" % service)
 
     # print the result in 'ok'
     print "Content-type: text/plain\n\n%s" % ok
 
 except Exception:
     t,v,tb=sys.exc_info()
-    print "Status: 400 %s: %s (%d)\nContent-type: text/plain\n" % (str(t), str(v), tb.tb_lineno)
+    print "Status: 400 %s: %s (line %d)\nContent-type: text/plain\n" % (str(t), str(v), tb.tb_lineno)
     # other output will appear if you use curl
     traceback.print_exc(file = sys.stdout)
     if station is not None: print "Station ID:",station

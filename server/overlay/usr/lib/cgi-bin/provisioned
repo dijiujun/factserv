@@ -1,0 +1,29 @@
+#!/usr/bin/python2
+
+import traceback, sys, os, re, psycopg2, psycopg2.extras
+from util import *
+
+class BadSubmit(Exception): pass
+
+try:
+    conn=psycopg2.connect('dbname=factory')
+    cur=conn.cursor()
+
+    cur.execute("select column_name from information_schema.columns where table_name='provisioned' and column_name like 'p_%' order by column_name")
+    columns=["deviceid","backhauled"]+[x[0] for x in cur.fetchall()]
+
+    cur.execute("select %s from provisioned order by deviceid" % ','.join(columns))
+    rows=cur.fetchall()
+    
+
+    content=table(("data",[[c.replace("p_","") for c in columns]]+[list(r) for r in rows]))
+
+    # print generated content
+    print html("Provisioned", None, content + tick_footer())
+
+except:
+    print "Content-type: text/plain\n\nAn error has occurred"
+    print
+    traceback.print_exc(file = sys.stdout)
+    #print
+    #for k in sorted(form.keys()): print k,"=",form.getvalue(k)

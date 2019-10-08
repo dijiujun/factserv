@@ -59,14 +59,20 @@ create or replace function updated() returns trigger as $$ begin new.updated=uct
 create trigger updated before update on devices for each row execute procedure updated();
 grant select, update, insert, trigger on devices to factory;
 
--- Provisioned data, per device, create with provision process CGI
--- Columns starting with 'p_' are magic
+-- Provisioned data, per device
 create table provisioned (
     deviceid varchar primary key,
-    backhauled boolean default false,
-    p_mac1 macaddr
+    backhauled boolean default false
 );
 grant select, update, insert, trigger on provisioned to factory;
+
+-- Provisionable columns, this list will grow!
+-- Note the column names must start with "p_".
+alter table provisioned add p_barcode varchar;
+alter table provisioned add p_mac1 macaddr;
+alter table provisioned add p_mac2 macaddr;
+alter table provisioned add p_mac3 macaddr;
+alter table provisioned add p_mac4 macaddr;
 
 -- Test results, per test, per device, maintain be various process CGIs
 create table tests (

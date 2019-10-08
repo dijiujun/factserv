@@ -1,3 +1,5 @@
 factory_interface=FACTORY_INTERFACE
 dut_interface=DUT_INTERFACE
 dut_ip=DUT_IP
+factory_id=FACTORY_ID
+organization="ORGANIZATION"

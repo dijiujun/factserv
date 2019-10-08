@@ -27,15 +27,22 @@
 # If a test fails it will be indicated as a failure but testing will continue.
 # However the testing cannot proceed to the next phase.
 #
-# The tests here don't do anything interesting, they are just for
-# demonstration and to fill the test log with stuff.
+# The first phase 1 test is responsible for storing the device ID to
+# non-volatile storage, where dodiag.sh can find it. For this demo we just
+# write it to /tmp/deviceid.
+Store device ID         :: echo $DEVICEID > /tmp/deviceid
 
-Show the environment :: sleep 1; set
+# Provision the PCB barcode if needed, requires operator intervention, give
+# them 10 minutes to respond! Note the regex is passed to 'grep -E' aka egrep
+Provision barcode       : 600  : getbar.sh '.{8}'
 
-Show the process list :: sleep 1; ps auxf
+# The rest of the tests don't do anything interesting other than fill the test
+# log with stuff.
+Show the environment    :: sleep 1; set
+Get process list        :: sleep 1; ps auxf
 
-Show the CWD :: sleep 1; ls -al
-
-4 {
-    Loop test :: sleep 1; echo Nothing to see here, carry on.
-}		
+# Repeat three times!
+3 {
+    Get CWD             :: sleep 1; ls -al
+    Nothing special     :: sleep 1; echo Nothing to see here, carry on.
+}

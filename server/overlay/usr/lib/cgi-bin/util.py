@@ -111,6 +111,7 @@ def html(title, style, content):
               <li><a href="/cgi-bin/status">Test Status</a></li>
               <li><a href="/cgi-bin/tests">Test History</a></li>
               <li><a href="/cgi-bin/devices">Device History</a></li>
+              <li><a href="/cgi-bin/provisioned">Provisioned</a></li>
               <li><a href="/cgi-bin/stations">Station Manager</a></li>
               <li><a href="/cgi-bin/builds">Build Manager</a></li>
               <li><a href="/index.html">Home</a></li>

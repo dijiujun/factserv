@@ -6,6 +6,8 @@ die() { echo $* >&2; exit 1; }
 # read the config file
 here=${0%/*}
 source $here/install.cfg
+# check what's required for uninstall, the rest are below
+[[ -n ${dut_interface:-} ]] || die "install.cfg does not define 'dut_interface'"
 
 if (($#)); then
     [ $1 == "-u" ] || die "Usage: $0 [-u]"
@@ -31,24 +33,29 @@ if (($#)); then
     # look for uninstall issues
     for f in $(find $here/overlay -type f,l -printf "%P\n"); do
         if [ -e /$f ] && diff /$f $here/overlay/$f &>/dev/null; then
-        {    
+        {
             echo "WARNING: /$f is the same as $here/overlay/$f"
             echo "You'll need to restore it manually with:"
             echo "    dpkg -S /$file (to determine the source package name)"
             echo "    apt install --reinstall -o Dpkg::Options::=--force-confask,confnew,confmiss <the-source-package>"
             echo "If that doesn't work, look for generation script in /var/lib/dpkg/info/*.postint"
-        } >&2     
-        fi 
-        # delete residual backup    
+        } >&2
+        fi
+        # delete residual backup
         rm -f /$f~
     done
-       
+
     echo "###################"
     echo "Uninstall complete!"
-    exit 0    
+    exit 0
 fi
 
 ! [ -d /etc/factory ] || die "Already installed, try '$0 -u'"
+
+[[ -n ${factory_interface:-} ]] || die "install.cfg does not define 'factory_interface'"
+[[ -n ${dut_ip:-} ]] || die "install.cfg does not define 'dut_ip'"
+[[ -n ${factory_id:-} ]] || die "install.cfg does not define 'factory_id'"
+[[ -n ${organization:-} ]] || die "install.cfg does not define 'organization'"
 
 # Verify interfaces
 [ -e /sys/class/net/$factory_interface ] || die "Invalid network interface $factory_interface"
@@ -83,6 +90,7 @@ for f in $(find $here/overlay -type f,l -printf "%P\n"); do
             s/DUT_INTERFACE/$dut_interface/g;
             s/DUT_IP/$dut_ip/g;
             s/DUT_NET/${dut_ip%.*}.*/g;
+            s/FACTORY_ID/$factory_id/g;
             s/ORGANIZATION/$organization/g;" /$f
 
 done

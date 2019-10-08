@@ -11,33 +11,28 @@ test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失�
 
 # parse options
 try:
-    opts, args = getopt.getopt(sys.argv[1:],'p:t:n')
+    opts, args = getopt.getopt(sys.argv[1:],'p:t:')
 
     buildID=args[0]
     deviceID=args[1]
 
     pionicIP="192.168.111.1"        # IP address of pionic controller
-    forcenew=False                  # if set, register as device as "newdevice"
     script_path="."                 # path to phaseX scripts
 
     for opt, arg in opts:
         if opt == '-p': pionicIP=arg
         elif opt == '-t': script_path=arg.rstrip("/")
-        elif opt == '-n': forcenew=True
 
 except:
     print """\
 Usage:
 
-    dodiags [options] buildID deviceID
+    dodiag [options] buildID deviceID
 
 Interact with factory server and perform diagnostics. Options are:
 
     -p ip.ad.re.ss    - pionic IP address, default is "192.168.111.1"
     -t path           - path to downloaded test lists and executables, default is "./"
-    -n                - register deviceID as a new device, i.e. force phase 1 operation
-
-Does not exit (except after showing this message)
 """
     sys.exit(1)
 
@@ -118,9 +113,6 @@ try:
     print "Build ID is", buildID
     print "Device ID is", deviceID
     print "Pionic IP is", pionicIP
-
-    if forcenew:
-        factory("newdevice",{"deviceid":deviceID, "buildid": buildID})
 
     # Pass info to test processes in the environment
     os.environ["PIONICIP"]=pionicIP
