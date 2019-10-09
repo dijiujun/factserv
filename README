@@ -4,7 +4,7 @@ is intended for use with Raspberry Pi running the 'pionic' repo.
 Theory of operation:
 
     The factory server has two ethernet interfaces, one that goes to the world
-    (via the factory) and one that goes DUTs via a switch. 
+    (via the factory) and one that goes DUTs via a switch.
 
     DUTs attach to the DUT subnet via pionic test controller or USB ethernet
     switch.
@@ -41,7 +41,7 @@ Theory of operation:
     testing to manipulate test status and output data. The server also provides
     a set of CGIs that can be invoed by factory personnel to look at diagnostic
     results and configure the server.
-    
+
     The server runs a DHCP server on the DUT interface which assigned static
     IPs to the pre-defined MAC address of pionic controller or USB ethernet
     dongle.  The last octet of the IP address is the test station ID.
@@ -100,8 +100,8 @@ To demo this code:
     server and perform the dummy diags within. Note you will be requested to
     'Reboot now' when testing is complete. but on the laptop it's OK to just
     press ^C. Each time you run startdiag.sh it will perform the next phase.
-    This is the equivalent of the target DUT rebooting. 
-    
+    This is the equivalent of the target DUT rebooting.
+
     Browse to factory server 'Tests' and 'Devices' pages to see the results of
     the testing.
 

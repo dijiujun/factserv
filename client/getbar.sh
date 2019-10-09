@@ -27,13 +27,13 @@ badge() {
 getprovision() {
     echo "Getting provisioned $1..." >&2
     $curl "http://$PIONICIP:61080/cgi-bin/factory?service=getprovision&deviceid=$DEVICEID&key=$1" || die "getprovision failed"
-}        
+}
 
 # given column name, provision with data on stdin
 setprovision() {
     echo Setting provisioned $1... >&2
     $curl -F value=@- "http://$PIONICIP:61080/cgi-bin/factory?service=setprovision&deviceid=$DEVICEID&key=$1" || die "setprovision failed"
-}        
+}
 
 # get the current provisioned barcode
 current=$(getprovision barcode)

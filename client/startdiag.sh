@@ -94,7 +94,7 @@ esac
 # Here, we're in factory mode, there is no escape
 
 # given forground and background colors, and up to 24 character text, display pionic badge
-badge() { 
+badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
     $echo $3 | $curl --data-binary @- "http://$pionicIP/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
 }

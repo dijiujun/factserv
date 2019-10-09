@@ -10,16 +10,16 @@ try:
     cur=conn.cursor()
 
     cur.execute("select column_name from information_schema.columns where table_name='provisioned' and column_name like 'p_%' order by column_name")
-    columns=["deviceid","backhauled"]+[x[0] for x in cur.fetchall()]
+    columns=["deviceid","date_trunc('seconds',updated)"]+[x[0] for x in cur.fetchall()]
+    titles=["Device ID","Updated"]+[x.replace("p_","").title() for x in columns[2:]]
 
-    cur.execute("select %s from provisioned order by deviceid" % ','.join(columns))
+    cur.execute("select %s from provisioned order by updated desc" % ','.join(columns))
     rows=cur.fetchall()
-    
 
-    content=table(("data",[[c.replace("p_","") for c in columns]]+[list(r) for r in rows]))
+    content=table(("data",[titles]+[list(r) for r in rows]))
 
     # print generated content
-    print html("Provisioned", None, content + tick_footer())
+    print html("Provisioned Data", None, content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

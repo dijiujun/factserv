@@ -7,11 +7,11 @@ table td { padding: 4px 10px; font-family:monospace; }
 table.form { margin: 20px }
 table.form td:nth-child(1) { text-align: right; font-weight: bold; }
 
-table.data { border-collapse: collapse; } 
+table.data { border-collapse: collapse; }
 table.data td { border: solid 1px black; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.data tr:nth-child(1) { font-weight: bold; }
 
-table.status { border-collapse: collapse; } 
+table.status { border-collapse: collapse; }
 table.status td { border: solid 1px black; }
 table.status tr:nth-child(1) { font-weight: bold; }
 

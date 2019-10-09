@@ -62,12 +62,17 @@ grant select, update, insert, trigger on devices to factory;
 -- Provisioned data, per device
 create table provisioned (
     deviceid varchar primary key,
-    backhauled boolean default false
 );
+-- delete legacy
+alter table provisioned drop backhauled;
+
+-- add timestamp, update whenever the row changes
+alter table provisioned add updated timestamp not null default uct();
+create trigger updated before update on provisioned for each row execute procedure updated();
 grant select, update, insert, trigger on provisioned to factory;
 
--- Provisionable columns, this list will grow!
--- Note the column names must start with "p_".
+-- Add provisionable columns, this list will grow!
+-- Note the names *must* start with "p_".
 alter table provisioned add p_barcode varchar;
 alter table provisioned add p_mac1 macaddr;
 alter table provisioned add p_mac2 macaddr;

@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 
-import traceback, sys, psycopg2, os 
+import traceback, sys, psycopg2, os
 from util import *
 
 #authenticate("Technician","tech:techx4")
@@ -17,16 +17,18 @@ try:
         action=[form.getvalue('action'), None]
         if '=' in action[0]: action = form.getvalue('action').split('=',1)
         if action[0] == 'none':
-            pass
+            reload()
+
         elif action[0] == 'reset':
             content=("<form method=get>"+
                          "Really reset the test state for <b>%s</b>?&nbsp;" % escape(action[1]) +
                          "<button name=action value='yes=%s'>Yes</button>" % action[1] +
-                         "<button name=action value=none>No</button>" +
                      "</form>")
+
         elif action[0]=='yes':
             cur.execute("update devices set phase=1, state='UNKNOWN', station=0 where deviceid=%s and state != 'COMPLETE'", (action[1],))
             conn.commit()
+            reload()
 
         else:
              raise Exception("Invalid action = %s %s" % tuple(action))
@@ -116,8 +118,8 @@ try:
         cur.execute("select deviceid, buildid, date_trunc('seconds',created), date_trunc('seconds',updated), state, phase, station, " +
                     "(state='TESTING' or state='FAILING') and updated < uct()-interval '10 minutes' as stale, " +
                     "state='PASSED' or state='FAILED' as idle " +
-                    "from devices "+ 
-                    ("where " + "and ".join(where) + " " if where else "") + 
+                    "from devices "+
+                    ("where " + "and ".join(where) + " " if where else "") +
                     "order by updated %s limit %s" % (sort,limit))
         if not cur.rowcount:
             content += "No match!"

@@ -101,8 +101,8 @@ git rev-parse HEAD --abbrev-ref HEAD > /etc/factory/installed
 # Fix permissions
 chown -R factory: ~factory/
 chmod -R go= ~factory/.ssh
-chown root:factory /var/www/html/downloads
-chmod 775 /var/www/html/downloads
+chown root:root /var/www/html/downloads
+chmod 777 /var/www/html/downloads
 
 echo "Configuring postgresql, ignore warnings on reinstall"
 su -lc "psql -f /etc/factory/schema.txt" postgres

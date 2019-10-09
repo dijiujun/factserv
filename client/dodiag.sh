@@ -32,13 +32,13 @@ trap 'set +eu; badge white red "Unexpected error\nError inesperado\n意外的错
 # drivers, etc, in preparation for performing diagnostics.
 
 # XXX get the device ID here, for this demo it's kept in /tmp/deviceid.
-# In real production it should be stored in flash or eeprom. 
+# In real production it should be stored in flash or eeprom.
 deviceID=$(cat /tmp/deviceid 2>/dev/null) || true
 
 # We expect the device ID to be "DEMO-" followed by 12 hex characters
 if echo $deviceID | grep -q -E '^DEMO-[0-9A-F]{12}$'; then
     echo "Current device ID is '$deviceID'"
-else    
+else
     # The device ID doesn't exist or is invalid, ask the server for a new one.
     # Request will fail if phase1 not allowed on this test station.
     echo "Requesting new device ID"

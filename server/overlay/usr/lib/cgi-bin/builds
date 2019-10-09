@@ -9,16 +9,30 @@ authenticate("Supervisor", "supervisor:superx5")
 
 maxstations=50
 
-# return
-def fileinfo(buildid):
-    tarball="/var/www/html/downloads/%s.tar.gz" % buildid
-    try:
-        (size, mtime)=os.stat(tarball)[6:9:2]
-        return "<div style='color:white; background-color:green'>%s: %d bytes</div>" % (datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"), size)
-    except:
-        return "<div style='color:white; background-color:red'>NO FILE</div>"
+# tarball base directory
+base="/var/www/html/downloads"
 
+# return
 try:
+
+    def fileinfo(buildid):
+        tarball = os.path.join(base, "%s.tar.gz" % buildid)
+        try:
+            (size, mtime)=os.stat(tarball)[6:9:2]
+            return "<div style='color:white; background-color:green'>%s, %d bytes</div>" % (datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"), size)
+        except:
+            return "<div style='color:white; background-color:red'>NO FILE</div>"
+
+    # make sure build ID is well formed, and maybe is in the database
+    # especially it must not contain filesystem meta-characters
+    def validate(buildid, exists=False):
+        if not buildid: raise Exception("Missing build ID")
+        s=re.search('[^-_.a-zA-Z0-9]',buildid)
+        if s: raise Exception("Build ID cannot contain '%s'" % s.group())
+        if buildid.startswith("."): raise Exception("Build ID cannot start with '.'")
+        if exists:
+            cur.execute("select 1 from builds where buildid=%s",(buildid,))
+            if not cur.rowcount: raise Exception("Build ID %s does not exist" % buildid)
 
     # return form with specified values, buildid, comment, phase1[50], phase2[50], phase3[50], phase4[50]
     # allow build id entry only if not currently defined
@@ -36,13 +50,8 @@ try:
 
     # return validated list of (buildid, comment, phase1[], phase2[], phase3[], phase4[]) from the submitted form
     def getvalues(form):
-        if "buildid" in form:
-            buildid=form.getvalue("buildid", default="").strip()
-            if buildid=="": raise Exception("Must specify a build ID")
-            s=re.search('[^-_.a-zA-Z0-9]',buildid)
-            if s: raise Exception("Build ID cannot contain '%s'" % s.group())
-        else:
-            buildid=""
+        buildid=form.getvalue("buildid", default="").strip()
+        validate(buildid)
 
         comment=' '.join(form.getvalue("comment", default="").split())
         p1=sorted([int(s) for s in (form.getvalue("phase1-%d" % n) for n in range(1,maxstations+1)) if s is not None])
@@ -95,14 +104,18 @@ try:
                         ",".join(["%s"]*(2+(maxstations*4))) +
                         ")", getvalues(form))
             conn.commit()
+            reload()
         elif action[0] == "del":
             content = ("<form method=get>Really delete build ID '%s'? "% action[1] +
                        "<button name=action value='really=%s'>Yes</button>" % escape(action[1]) +
-                       "<button name=action value=none>No</button>"+
                        "</form>")
         elif action[0] == "really":
+            validate(action[1], exists=True)
+            tarball=os.path.join(base,"%s.tar.gz" % action[1])
+            if os.path.isfile(tarball): os.remove(tarball)
             cur.execute("delete from builds where buildid=%s", (action[1],))
             conn.commit()
+            reload()
         elif action[0] == "edit":
             cur.execute("select buildid, comment " +
                         "".join(", phase1[%d]" % n for n in range(1,maxstations+1)) +\
@@ -138,19 +151,40 @@ try:
                         "".join(", phase4[%d]=%%s" % x for x in range(1,maxstations+1)) +
                         " where buildid=%s", values[1:]+(action[1],))
             conn.commit()
+            reload()
+        elif action[0] == "upload":
+            validate(action[1], exists=True)
+            if not "upload" in form:
+                # note the action is left as is, so we'll come back here with an 'upload' element
+                content = ("<form enctype=multipart/form-data method=post>" +
+                           "Select a diagnostic tarball for build ID <b>%s</b> and click 'Upload'." % action[1] +
+                           "<p><input type=file name=upload accept=.tar.gz> <input type=submit value=Upload>" +
+                           "</form>"+
+                           "<p><b>Note:</b> The selected file must be a gzipped tarball. It will be saved as '%s.tar.gz', regardless of its original name." % action[1])
+            else:
+                upload=form["upload"]
+                if not upload.file: raise Exception("Malformed upload submit")
+                chunk = upload.file.read(65536)
+                if not chunk: raise Exception("No upload content")
+                f = file(os.path.join(base, "%s.tar.gz"%action[1]), 'wb')
+                while 1:
+                    f.write(chunk)
+                    chunk = upload.file.read(65536)
+                    if not chunk: break
+                f.close()
+                reload()
+
         else:
             raise Exception("Invalid action = %s %s" % tuple(action))
 
     if not content:
-        # here, generate thge default page content
-
+        # Generate the default page content
         cur.execute("select buildid, comment" +
                     "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +
                     "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
                     "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
                     "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +
                     " from builds order by buildid")
-
         if not cur.rowcount:
             content = "No builds defined"
         else:
@@ -170,6 +204,7 @@ try:
                                    "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) +
                                    "<button name=action value='del=%s'>Del</button>" % escape(row[0]) +
                                    "<button name=action value='clone=%s'>Clone</button>" % escape(row[0]) +
+                                   "<button name=action value='upload=%s'>Upload</button>" % escape(row[0]) +
                                    "</form>" )
                                ] for row in rows
                              ]

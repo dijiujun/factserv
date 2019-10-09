@@ -93,6 +93,7 @@ try:
     elif service == "gendevice":
         # Create a new device
         # First check that the given buildID is allowed to do phase 1 testing
+        if not factory_id: raise Exception("New devices are disallowed because factory ID is 0")
         buildid = require("buildid")
         build = checkbuild(buildid)
         if not build["phase1"]: raise Exception("New device is disallowed for buildid %s on station %s" % (buildid,station))

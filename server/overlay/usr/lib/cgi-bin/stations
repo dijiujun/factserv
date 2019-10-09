@@ -43,7 +43,7 @@ try:
         action=[form.getvalue('action'), None]
         if '=' in action[0]: action=action[0].split('=',1)
         if action[0] == 'none':
-            pass
+            reload()
         elif action[0] == 'new':
             content = ("<form method=get>"+
                         table(("form",
@@ -59,16 +59,17 @@ try:
                 cur.execute('insert into stations (station,mac,fixture,comment) values(%s,%s,%s,%s)', getvalues(form))
                 conn.commit()
                 dnsmasq()
+                reload()
         elif action[0] == 'del':
             content = ("<form method=get>" +
                        "Really delete station %s?&nbsp;" % escape(action[1]) +
                        "<button name=action value='really=%s'>Yes</button>" % escape(action[1]) +
-                       "<button name=action value=none>No</button>"+
                        "</form>" )
         elif action[0] == 'really':
                 cur.execute('delete from stations where station=%s', (action[1],))
                 conn.commit()
                 dnsmasq()
+                reload()
         elif action[0] == 'edit':
             cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
             station, mac, fixture, comment = escape(cur.fetchone())
@@ -86,6 +87,7 @@ try:
             cur.execute('update stations set mac=%s, fixture=%s, comment=%s where station=%s', getvalues(form)[1:]+(action[1],))
             conn.commit()
             dnsmasq()
+            reload()
         else:
             raise Exception('Invalid action = "%s %s' % tuple(action))
 

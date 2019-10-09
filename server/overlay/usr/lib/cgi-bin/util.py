@@ -111,7 +111,7 @@ def html(title, style, content):
               <li><a href="/cgi-bin/status">Test Status</a></li>
               <li><a href="/cgi-bin/tests">Test History</a></li>
               <li><a href="/cgi-bin/devices">Device History</a></li>
-              <li><a href="/cgi-bin/provisioned">Provisioned</a></li>
+              <li><a href="/cgi-bin/provisioned">Provisioned Data</a></li>
               <li><a href="/cgi-bin/stations">Station Manager</a></li>
               <li><a href="/cgi-bin/builds">Build Manager</a></li>
               <li><a href="/index.html">Home</a></li>
@@ -145,3 +145,8 @@ def authenticate(realm, user):
     except:
         print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="%s"\n' % realm
         sys.exit(0)
+
+# Issue a redirect to the current page and exit
+def reload():
+    print 'Content-type: text/plain\nStatus: 302 Found\nLocation:',os.getenv('SCRIPT_NAME'),'\n'
+    sys.exit(0)

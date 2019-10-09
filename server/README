@@ -22,9 +22,9 @@ factory LAN.  The other will be the "dut" interface, attached (via a switch) to
 the test stations. The server acts as the gateway for the dut network,
 providing DHCP, DNS, and NAT.
 
-The server runs Debian Linux. 
+The server runs Debian Linux.
 
-Start by downloading the ISO install image from 
+Start by downloading the ISO install image from
 https://cdimage.debian.org/cdimage/archive/9.9.0/amd64/iso-cd/debian-9.9.0-amd64-netinst.iso
 (later distributions have not been tested).
 
@@ -34,30 +34,30 @@ Assuming the server can boot from USB, dd the image onto a USB stick.
 Attach keyboard, display and ethernet to server. Mouse is not required.
 Whichever ethernet you attach will become the factory interface, it's a good
 idea to mark this for future reference. The install network must supply DHCP
-and internet access. 
+and internet access.
 
 Install Debian:
 
     Boot the server from the prepared USB stick (or CD/DVD). This may require
-    entering BIOS and selecting the boot device. 
+    entering BIOS and selecting the boot device.
 
     When the Debian install menu appears, press down arrow and select
-    "Install".  Do not select "Graphical Install". 
+    "Install".  Do not select "Graphical Install".
 
     Select the default for language, country, keymap, and network.
 
-    Set hostname to "factory". 
+    Set hostname to "factory".
 
     Set domain name to "localdomain".
 
     Set a root password. Password strength is not super important since the
-    only access to the system is via ssh key.  
+    only access to the system is via ssh key.
 
     Leave the full name for new user blank.
 
     Set the username to "factory". Again, the password strength is not
-    important, just using "factory" is acceptable. 
-    
+    important, just using "factory" is acceptable.
+
     Set the default time zone (it will be changed to UCT later).
 
     If the hard disk has an existing non-UEFI bootloader you will be asked if
@@ -78,8 +78,8 @@ Install Debian:
     Wait several minutes while the base system is installed.
 
     Select "United States".
-    
-    Select "ftp.us.debian.org". 
+
+    Select "ftp.us.debian.org".
 
     Enter proxy information if necessary, but note the proxy will need to be
     disabled once the server is installed in the factory.
@@ -106,15 +106,15 @@ First become root:
 
 (Note the use of '>' in this document indicates a command to be entered.)
 
-Check network interfaces:    
-    
+Check network interfaces:
+
     > ip a
 
 This should list two interfaces (besides "lo"). The inteface names are
 hardware-specific, for example "eno1" and "eno2". One of the interfaces will
 Have an "inet" address which was assigned by DHCP, this is one you plugged
 ethernet cable into, and becomes the factory interface.  The other will not
-have an address, this is the DUT interface. 
+have an address, this is the DUT interface.
 
 Make a note of the interface names and the current IP address.
 
@@ -127,7 +127,7 @@ Install git and download the factserv repo:
     > git clone https://github.com/glitchub/factserv
 
 Edit the install configuration script:
-    
+
     > cd factserv/server
     > nano install.cfg (or vi, at your discretion)
 
@@ -143,7 +143,7 @@ This will generate quite a bit of output, finally ending with "Install
 complete". If you are asked any questions, type or select "Yes".
 
 Reboot the system.
-    
+
     > reboot
 
 After reboot, note the IP address of both interfaces appear on the login
@@ -161,7 +161,7 @@ To use ssh, copy the file server/insecure_factory_rsa_id to your workstation
 
 The ssh key passphase is "insecure".
 
-################################### NOTE ###################################   
+################################### NOTE ###################################
 
 This process installs insecure ssh and ssl keys by default, to allow
 preliminary configuration and testing. They are insecure because they are
