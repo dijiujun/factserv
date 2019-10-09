@@ -104,7 +104,7 @@ chmod -R go= ~factory/.ssh
 chown root:root /var/www/html/downloads
 chmod 777 /var/www/html/downloads
 
-echo "Configuring postgresql, ignore warnings on reinstall"
+echo "Configuring postgresql, ignore 'already exists' and 'does not exist' errors on reinstall"
 su -lc "psql -f /etc/factory/schema.txt" postgres
 
 # configure Apache

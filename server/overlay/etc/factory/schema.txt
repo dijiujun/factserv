@@ -61,7 +61,7 @@ grant select, update, insert, trigger on devices to factory;
 
 -- Provisioned data, per device
 create table provisioned (
-    deviceid varchar primary key,
+    deviceid varchar primary key
 );
 -- delete legacy
 alter table provisioned drop backhauled;
