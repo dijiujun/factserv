@@ -5,11 +5,6 @@
 # to download a tarball from the factory server, then passes control to
 # dodiag.sh from the tarball.
 
-# This is the pionic controller's IP address. Note pionic forwards port 61080
-# to the factory server port 80, and 61443 to factory server port 443. All
-# server traffic should go via these ports.
-pionicIP=192.168.111.1  # pionic controller IP address
-
 # This is the factory detction method. If the DUT has a pre-defined static IP
 # address at the time that this script runs, then use 'http'. Otherwise use
 # 'beacon' (pionic must also be configured to start the beacon server).
@@ -79,11 +74,11 @@ case "$method" in
         ;;
 
     http)
-        # We expect that $pionicIP is on the local subnet and forwards port 61080
-        # to the server http, and 61433 to the server https. Perform a server
-        # 'fixture' connect, if it doesn't work then assume we're not in the
-        # factory and just quietly exit.
-        $curl -m 2 "http://$pionicIP:61080/cgi-bin/factory?service=fixture" >/dev/null 2>/dev/null || exit 0
+        # We expect that hostname 'pionic.server' will resolve to the local
+        # subnet and forwards port 61080 to the server http, and 61433 to the
+        # server https. Perform a server 'fixture' connect, if it doesn't work
+        # then assume we're not in the factory and just quietly exit.
+        $curl -m 2 "http://pionic.server:61080/cgi-bin/factory?service=fixture" >/dev/null 2>/dev/null || exit 0
         ;;
 
     *)
@@ -96,7 +91,7 @@ esac
 # given forground and background colors, and up to 24 character text, display pionic badge
 badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
-    $echo $3 | $curl --data-binary @- "http://$pionicIP/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+    $echo $3 | $curl --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
 }
 
 # spin forever, after writing exit screen
@@ -127,10 +122,10 @@ cd $workspace
 # production software, see the note above.
 for pubkey in ${production:-} ${development:-}; do
     echo "Downloading with key hash $pubkey"
-    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$buildID" "https://$pionicIP:61443/cgi-bin/factory?service=download" | tar -xzv; then
+    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$buildID" "https://pionic.server:61443/cgi-bin/factory?service=download" | tar -xzv; then
         [ -x ./dodiag.sh ] || die "Tarball does not contain dodiag.sh"
         # invoke with parameters of interest, it should not return
-        ./dodiag.sh $pionicIP $buildID
+        ./dodiag.sh $buildID
         die "dodiag.sh failed with status $?"
     fi
 done

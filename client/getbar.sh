@@ -9,7 +9,6 @@
 die() { echo $* >&2; exit 1; }
 
 # check variables installed by dodiag
-[ -n "${PIONICIP:-}" ] || die 'Requires $PIONICIP'
 [ -n "${DEVICEID:-}" ] || die 'Requires $DEVICEID'
 
 [ $# -eq 1 ] || die "Usage: getbar regex"
@@ -20,19 +19,19 @@ curl="curl -qsSf"
 # given forground and background colors, and up to 24 character text, display pionic badge
 badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
-    $echo $3 | $curl --data-binary @- "http://$PIONICIP/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+    $echo $3 | $curl --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
 }
 
 # given column name, return provisioned data or ""
 getprovision() {
     echo "Getting provisioned $1..." >&2
-    $curl "http://$PIONICIP:61080/cgi-bin/factory?service=getprovision&deviceid=$DEVICEID&key=$1" || die "getprovision failed"
+    $curl "http://pionic.server:61080/cgi-bin/factory?service=getprovision&deviceid=$DEVICEID&key=$1" || die "getprovision failed"
 }
 
 # given column name, provision with data on stdin
 setprovision() {
     echo Setting provisioned $1... >&2
-    $curl -F value=@- "http://$PIONICIP:61080/cgi-bin/factory?service=setprovision&deviceid=$DEVICEID&key=$1" || die "setprovision failed"
+    $curl -F value=@- "http://pionic.server:61080/cgi-bin/factory?service=setprovision&deviceid=$DEVICEID&key=$1" || die "setprovision failed"
 }
 
 # get the current provisioned barcode
@@ -47,7 +46,7 @@ echo "Requesting scan" >&2
 flush="&flush" # flush on the first scan
 while true; do
     badge black yellow "Scan barcode\nEscanear código\n扫描条形码"
-    if ! barcode=$($curl "http://$PIONICIP/getbar?timeout=5$flush" 2>&1); then
+    if ! barcode=$($curl "http://pionic.server/getbar?timeout=5$flush" 2>&1); then
         echo $barcode | grep -q 'Timeout$' || die "getbar failed: $barcode"
     else
         echo "Testing '$barcode' against '$regex'" >&2

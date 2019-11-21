@@ -11,28 +11,15 @@ test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失�
 
 # parse options
 try:
-    opts, args = getopt.getopt(sys.argv[1:],'p:t:')
-
     buildID=args[0]
     deviceID=args[1]
-
-    pionicIP="192.168.111.1"        # IP address of pionic controller
-    script_path="."                 # path to phaseX scripts
-
-    for opt, arg in opts:
-        if opt == '-p': pionicIP=arg
-        elif opt == '-t': script_path=arg.rstrip("/")
-
 except:
     print """\
 Usage:
 
-    dodiag [options] buildID deviceID
+    dodiag buildID deviceID
 
-Interact with factory server and perform diagnostics. Options are:
-
-    -p ip.ad.re.ss    - pionic IP address, default is "192.168.111.1"
-    -t path           - path to downloaded test lists and executables, default is "./"
+Interact with factory server and perform diagnostics.
 """
     sys.exit(1)
 
@@ -40,7 +27,7 @@ class PionicFail(Exception): pass
 # Send a request to the pionic controller, return response
 # If data is provided, it is will sent as raw POST content
 def pionic(request, data=None, debug=0):
-    c=httplib.HTTPConnection(pionicIP)
+    c=httplib.HTTPConnection("pionic.server")
     c.set_debuglevel(debug)
     if data is None:
         c.request("GET","/"+request)
@@ -67,7 +54,7 @@ def report(text, fg="white", bg="blue"):
 class FactoryFail(Exception): pass
 def factory(service, options={}, debug=0):
     options["service"]=service
-    c=httplib.HTTPConnection(pionicIP,port=61080)
+    c=httplib.HTTPConnection("pionic.server",port=61080)
     c.set_debuglevel(debug)
     options=urllib.urlencode(options)
     if len(options)<512:
@@ -112,10 +99,8 @@ try:
 
     print "Build ID is", buildID
     print "Device ID is", deviceID
-    print "Pionic IP is", pionicIP
 
     # Pass info to test processes in the environment
-    os.environ["PIONICIP"]=pionicIP
     os.environ["BUILDID"]=buildID
     os.environ["DEVICEID"]=deviceID
 

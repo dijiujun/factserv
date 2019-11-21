@@ -7,16 +7,15 @@
 # print message and exit
 die() { echo $* >&2; exit 1; }
 
-[ $# = 2 ] || die "Usage: dodiag.sh pionicIP buildID"
-pionicIP=$1
-buildID=$2
+[ $# = 1 ] || die "Usage: dodiag.sh buildID"
+buildID=$1
 
 curl="curl -qsSf"
 
 # given forground and background colors, and up to 24 character text, display pionic badge
 badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
-    $echo $3 | $curl -qsSf --data-binary @- "http://$pionicIP/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+    $echo $3 | $curl -qsSf --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
 }
 
 # spin forever, after writing an error screen
@@ -42,7 +41,7 @@ else
     # The device ID doesn't exist or is invalid, ask the server for a new one.
     # Request will fail if phase1 not allowed on this test station.
     echo "Requesting new device ID"
-    if ! deviceID=$($curl "http://$pionicIP:61080/cgi-bin/factory?service=gendevice&buildid=$buildID") >/dev/null; then
+    if ! deviceID=$($curl "http://pionic.server:61080/cgi-bin/factory?service=gendevice&buildid=$buildID") >/dev/null; then
         echo "Phase 1 is not allowed!" >&2
         badge red white "Not allowed\nNo permitido\n不允许"
         spin
@@ -53,6 +52,6 @@ else
 fi
 
 # Invoke dodiag to run the tests, it should not return.
-echo "Starting './dodiag -p$pionicIP $buildID $deviceID'"
-python ./dodiag -p$pionicIP $buildID $deviceID
+echo "Starting './dodiag $buildID $deviceID'"
+python ./dodiag $buildID $deviceID
 die "dodiag failed with status $?"
