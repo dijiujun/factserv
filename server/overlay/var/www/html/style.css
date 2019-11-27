@@ -9,11 +9,11 @@ table.form td:nth-child(1) { text-align: right; font-weight: bold; }
 
 table.data { border-collapse: collapse; }
 table.data td { border: solid 1px black; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-table.data tr:nth-child(1) { font-weight: bold; }
+table.data tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
 
 table.status { border-collapse: collapse; }
 table.status td { border: solid 1px black; }
-table.status tr:nth-child(1) { font-weight: bold; }
+table.status tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
 
 table tr.PASSED,   table td.PASSED,    table tr.PASSED a,   table td.PASSED a   { background-color: lightgreen; color: black; font-weight: bold }
 table tr.FAILED,   table td.FAILED,    table tr.FAILED a,   table td.FAILED a   { background-color: #D00000; color: white; font-weight: bold }
