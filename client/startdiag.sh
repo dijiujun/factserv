@@ -48,6 +48,9 @@ address=
 development="paYQewbP520iAv1hIi/A1lvYyVzMdDv6yEmp9El0aPc="
 production=""
 
+# IP address of pionic controller. DNS should be avoided here.
+pionic=192.168.111.1
+
 # print message and exit
 die() { echo $* >&2; exit 1; }
 
@@ -74,11 +77,11 @@ case "$method" in
         ;;
 
     http)
-        # We expect that hostname 'pionic.server' will resolve to the local
-        # subnet and forwards port 61080 to the server http, and 61433 to the
-        # server https. Perform a server 'fixture' connect, if it doesn't work
-        # then assume we're not in the factory and just quietly exit.
-        $curl -m 2 "http://pionic.server:61080/cgi-bin/factory?service=fixture" >/dev/null 2>/dev/null || exit 0
+        # We expect that pionic forwards port 61080 to the server http, and
+        # 61433 to the server https. Perform a server 'fixture' connect, if it
+        # doesn't work then assume we're not in the factory and just quietly
+        # exit.
+        $curl -m 2 "http://$pionic:61080/cgi-bin/factory?service=fixture" >/dev/null 2>/dev/null || exit 0
         ;;
 
     *)
@@ -91,7 +94,7 @@ esac
 # given forground and background colors, and up to 24 character text, display pionic badge
 badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
-    $echo $3 | $curl --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+    $echo $3 | $curl --data-binary @- "http://$pionic/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
 }
 
 # spin forever, after writing exit screen
@@ -122,7 +125,7 @@ cd $workspace
 # production software, see the note above.
 for pubkey in ${production:-} ${development:-}; do
     echo "Downloading with key hash $pubkey"
-    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$buildID" "https://pionic.server:61443/cgi-bin/factory?service=download" | tar -xzv; then
+    if $curl -k --pinnedpubkey "sha256//$pubkey" --form-string "buildid=$buildID" "https://$pionic:61443/cgi-bin/factory?service=download" | tar -xzv; then
         [ -x ./dodiag.sh ] || die "Tarball does not contain dodiag.sh"
         # invoke with parameters of interest, it should not return
         ./dodiag.sh $buildID
