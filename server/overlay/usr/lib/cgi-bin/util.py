@@ -135,16 +135,14 @@ def plaintext(content):
 # Authenticate user, realm appears in the browser password dialog, user is
 # specified as "name:password". If not authenticated then aborts with status
 # 401, so must be called before any other output.
+# Note apache2 must be configured with "CGIPassAuth on"
 def authenticate(realm, user):
     if not "GATEWAY_INTERFACE" in os.environ: return # skip if cgi is run from command line
-    auth=""
-    try:
+    if "HTTP_AUTHORIZATION" in os.environ:
         auth = base64.decodestring(os.environ["HTTP_AUTHORIZATION"].split()[1])
-        if auth != user:
-            raise Exception
-    except:
-        print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="%s"\n' % realm
-        sys.exit(0)
+        if auth == user: return
+    print 'Content-type: text/plain\nStatus: 401 Unauthorized\nWWW-Authenticate: basic realm="%s"\n' % realm
+    sys.exit(0)
 
 # Issue a redirect to the current page and exit
 def reload():

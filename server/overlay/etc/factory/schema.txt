@@ -33,6 +33,7 @@ create table builds (
     phase4 int array,
     comment varchar
 );
+alter table builds add match varchar unique;
 grant select, update, insert, delete, trigger on builds to factory;
 -- delete legacy
 alter table builds drop "filename";

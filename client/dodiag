@@ -11,8 +11,8 @@ test_failed     ='\n'.join(["Test Failed",      "Prueba fallida" ,  "测试失�
 
 # parse options
 try:
-    buildID=args[0]
-    deviceID=args[1]
+    buildID=sys.argv[1]
+    deviceID=sys.argv[2]
 except:
     print """\
 Usage:
@@ -72,8 +72,8 @@ def factory(service, options={}, debug=0):
 def perform(command, timeout):
     print "Starting '%s' for max %d seconds..." % (command, timeout)
     # Support any shell command, let the shell be session leader so os.killpg can kill it and its children
-    # Note we also add script_path to the PATH
-    p = subprocess.Popen(["/bin/sh","-c",command],stdout=subprocess.PIPE,stderr=subprocess.STDOUT, preexec_fn=os.setsid, env=dict(os.environ,PATH=script_path+os.pathsep+os.environ["PATH"]))
+    # Note we also add '.' to the PATH
+    p = subprocess.Popen(["/bin/sh","-c",command],stdout=subprocess.PIPE,stderr=subprocess.STDOUT, preexec_fn=os.setsid, env=dict(os.environ,PATH='.'+os.pathsep+os.environ["PATH"]))
     t = threading.Timer(timeout, os.killpg, (p.pid, signal.SIGKILL))
     try:
         t.start()
@@ -106,8 +106,9 @@ try:
 
     phase, sessionID = factory("startsession",{"deviceid":deviceID, "buildid":buildID}).split()[0:2]
 
-    script="%s/phase%s" % (script_path, phase)
-    print "Using test list %s" % script
+    
+    print "Performing test phase", phase
+    script="phase%s" % phase
 
     # flags that can be set or cleared by testlist
     flags={"IgnoreFail":False}

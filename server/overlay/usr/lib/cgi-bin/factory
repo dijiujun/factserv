@@ -62,15 +62,24 @@ try:
         return v.strip()
 
     # vaildate buildid, return dict containing the builds table row
-    # postgres array syntax is borked
+    # buildid may be aliased via the match field of another buildid
     # build["phaseX"] is true if phase X is enabled on the requesting station
     # build["hasphaseX"] is true if phase X is enabled on *any* station
     def checkbuild(buildid):
-        cur.execute("select %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), 0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL from builds where buildid=%s", (station, station, station, station, buildid))
-        if not cur.rowcount: raise Exception("Invalid buildid '%s'" % buildid)
-        build={}
+        # look for the exact buildid
+        cur.execute("select buildid from builds where buildid=%s", (buildid,))
+        if not cur.rowcount:
+            # if that doesn't work, look for longest 'match' regex, note '^' is prepended
+            cur.execute("select buildid from builds where %s ~ ('^'||match) order by buildid desc limit 1", (buildid,))
+            if not cur.rowcount: raise Exception("Invalid buildid '%s'" % buildid)
+        actualid=cur.fetchone()[0]
+        # postgres array syntax is borked
+        cur.execute("select %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), " +
+                    "0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL " +
+                    "from builds where buildid=%s", (station, station, station, station, actualid))
+        build={"actualid":actualid}
         build["phase1"],build["phase2"],build["phase3"],build["phase4"],build["hasphase2"],build["hasphase3"],build["hasphase4"]=cur.fetchone()
-        if not (build["phase1"] or build["phase2"] or build["phase3"] or build["phase4"]): raise Exception("Buildid %s not enabled for station %s" % (buildid, station))
+        if not (build["phase1"] or build["phase2"] or build["phase3"] or build["phase4"]): raise Exception("Buildid %s (%s) not enabled for station %s" % (buildid, actualid, station))
         return build
 
     ok = None
@@ -82,13 +91,13 @@ try:
         # The redirect is handled by Apache, the client won't see it
         buildid = require("buildid")
         build = checkbuild(buildid)
-        if os.path.isfile("/var/www/html/downloads/%s/%s.tar.gz" % (station,buildid)):
-            print "Location: /downloads/%s/%s.tar.gz\n" % (station,buildid)
+        if os.path.isfile("/var/www/html/downloads/%s/%s.tar.gz" % (station,build["actualid"])):
+            print "Location: /downloads/%s/%s.tar.gz\n" % (station,build["actualid"])
             quit()
-        if os.path.isfile("/var/www/html/downloads/%s.tar.gz" % buildid):
-            print "Location: /downloads/%s.tar.gz\n" % buildid
+        if os.path.isfile("/var/www/html/downloads/%s.tar.gz" % build["actualid"]):
+            print "Location: /downloads/%s.tar.gz\n" % build["actualid"]
             quit()
-        raise Exception("No tarball for build ID '%s'" % buildid)
+        raise Exception("No tarball for build ID %s (%s)" % (buildid, build["actualid"]))
 
     elif service == "gendevice":
         # Create a new device
@@ -96,7 +105,7 @@ try:
         if not factory_id: raise Exception("New devices are disallowed because factory ID is 0")
         buildid = require("buildid")
         build = checkbuild(buildid)
-        if not build["phase1"]: raise Exception("New device is disallowed for buildid %s on station %s" % (buildid,station))
+        if not build["phase1"]: raise Exception("New device is disallowed for buildid %s (%s) on station %s" % (buildid, build["actualid"], station))
         # Then return a theoretically unique 12-digit device ID in form "FFSSNNNNNNNN"
         # Where:
         #   FF is factory ID in hex (from the config file)
@@ -119,7 +128,7 @@ try:
 
         cur.execute("select state, phase from devices where deviceid=%s", (deviceid,))
         if not cur.rowcount:
-            if not build["phase1"]: raise Exception("Phase1 disallowed for unknown device %s running buildid %s on station %s" % (deviceid,buildid,station))
+            if not build["phase1"]: raise Exception("Phase1 disallowed for unknown device %s running buildid %s (%s) on station %s" % (deviceid, buildid, build["actualid"], station))
             cur.execute("insert into devices (state, phase, station, buildid, deviceid) values ('TESTING', 1, %s, %s, %s)", (station, buildid, deviceid))
             phase=1
         else:
@@ -131,7 +140,7 @@ try:
             if phase == 4 and not build["phase4"]: phase = 3
             if phase == 3 and not build["phase3"]: phase = 2
             if phase == 2 and not build["phase2"]: phase = 1
-            if phase == 1 and not build["phase1"]: raise Exception("can't perform phase %s or any predecessor for buildid %s on station %s" % (p, buildid, station))
+            if phase == 1 and not build["phase1"]: raise Exception("can't perform phase %s or any predecessor for buildid %s (%s) on station %s" % (p, buildid, build["actualid"], station))
             cur.execute("update devices set state='TESTING', phase=%s, station=%s, buildid=%s  where deviceid=%s", (phase, station, buildid, deviceid))
         # add an entry into the test table
         cur.execute("insert into tests (deviceid, station, phase, command, testname) values (%s, %s, %s, %s, %s) returning id", (deviceid, station, phase, "", "*** SESSION ***"))

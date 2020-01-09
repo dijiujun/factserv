@@ -5,6 +5,7 @@ input { font-family:monospace }
 table td { padding: 4px 10px; font-family:monospace; }
 
 table.form { margin: 20px }
+table.form td { white-space: nowrap; }
 table.form td:nth-child(1) { text-align: right; font-weight: bold; }
 
 table.data { border-collapse: collapse; }
@@ -23,6 +24,7 @@ table tr.TESTING,  table td.TESTING,   table tr.TESTING a,  table td.TESTING a  
 table tr.UNKNOWN,  table td.UNKNOWN,   table tr.UNKNOWN a,  table td.UNKNOWN a  { background-color: grey; color: black; }
 table tr.STALE,    table td.STALE,     table tr.STALE a,    table td.STALE a    { background-color: yellow; color: black; }
 
+button { padding: 3px; }
 button.click { border: 1px outset darkgrey; background-color: white; padding: 0; height:12px; width:12px; border-radius:12px; vertical-align: middle }
 button.click:hover { background-color: grey; }
 

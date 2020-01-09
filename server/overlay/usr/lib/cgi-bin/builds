@@ -5,15 +5,16 @@
 import traceback, re, sys, psycopg2, os, datetime
 from util import *
 
-authenticate("Supervisor", "supervisor:superx5")
-
-maxstations=50
+phases=4	# number of phases
+maxstations=50	# stations per phase
+other=3 	# number of database fields before stations
 
 # tarball base directory
 base="/var/www/html/downloads"
 
 # return
 try:
+    authenticate("Supervisor", "supervisor:superx5")
 
     def fileinfo(buildid):
         tarball = os.path.join(base, "%s.tar.gz" % buildid)
@@ -34,30 +35,33 @@ try:
             cur.execute("select 1 from builds where buildid=%s",(buildid,))
             if not cur.rowcount: raise Exception("Build ID %s does not exist" % buildid)
 
-    # return form with specified values, buildid, comment, phase1[50], phase2[50], phase3[50], phase4[50]
+    # return form with specified values, buildid, comment, match, phase1[50], phase2[50], phase3[50], phase4[50]
     # allow build id entry only if not currently defined
     def makeform(row):
-        row=escape(list(row) if row else [None for n in range(2 + maxstations*4)])
+        row=escape(list(row) if row else [None for n in range(other + maxstations*4)])
         return table(("form",
                       [
                           ["Build ID",            "<input name=buildid type=text>" if row[0] == "" else escape(row[0])],
-                          ["Phase 1 stations",    ''.join("<input name=phase1-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*0]) for n in range(1,maxstations+1))],
-                          ["Phase 2 stations",    ''.join("<input name=phase2-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*1]) for n in range(1,maxstations+1))],
-                          ["Phase 3 stations",    ''.join("<input name=phase3-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*2]) for n in range(1,maxstations+1))],
-                          ["Phase 4 stations",    ''.join("<input name=phase4-%d type=text size=3 value='%s'>" % (n,row[1+n+maxstations*3]) for n in range(1,maxstations+1))],
+                          ["Phase 1 stations",    ''.join("<input name=phase1-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*0]) for n in range(maxstations))],
+                          ["Phase 2 stations",    ''.join("<input name=phase2-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*1]) for n in range(maxstations))],
+                          ["Phase 3 stations",    ''.join("<input name=phase3-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*2]) for n in range(maxstations))],
+                          ["Phase 4 stations",    ''.join("<input name=phase4-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*3]) for n in range(maxstations))],
+			  ["Match", 		   "<input name=match type=text value='%s'>" % escape(row[2])],
                           ["Comment",              "<input name=comment type=text value='%s'>" % escape(row[1])]
                       ]))
 
-    # return validated list of (buildid, comment, phase1[], phase2[], phase3[], phase4[]) from the submitted form
-    def getvalues(form):
-        buildid=form.getvalue("buildid", default="").strip()
+    # return validated list of (buildid, comment, match, phase1[], phase2[], phase3[], phase4[]) from the submitted form
+    def getvalues(form, buildid=None):
+        if buildid is None: buildid = form.getvalue("buildid", default="").strip()
         validate(buildid)
 
-        comment=' '.join(form.getvalue("comment", default="").split())
-        p1=sorted([int(s) for s in (form.getvalue("phase1-%d" % n) for n in range(1,maxstations+1)) if s is not None])
-        p2=sorted([int(s) for s in (form.getvalue("phase2-%d" % n) for n in range(1,maxstations+1)) if s is not None])
-        p3=sorted([int(s) for s in (form.getvalue("phase3-%d" % n) for n in range(1,maxstations+1)) if s is not None])
-        p4=sorted([int(s) for s in (form.getvalue("phase4-%d" % n) for n in range(1,maxstations+1)) if s is not None])
+        comment = ' '.join(form.getvalue("comment", default="").split())
+        match = form.getvalue("match", default="").strip()
+        if match is "": match = None
+        p1 = sorted([int(s) for s in (form.getvalue("phase1-%d" % (n+1)) for n in range(maxstations)) if s is not None])
+        p2 = sorted([int(s) for s in (form.getvalue("phase2-%d" % (n+1)) for n in range(maxstations)) if s is not None])
+        p3 = sorted([int(s) for s in (form.getvalue("phase3-%d" % (n+1)) for n in range(maxstations)) if s is not None])
+        p4 = sorted([int(s) for s in (form.getvalue("phase4-%d" % (n+1)) for n in range(maxstations)) if s is not None])
 
         if not len(p1):
             raise Exception("Must specify at least one phase 1 test station")
@@ -72,8 +76,8 @@ try:
             if n < 0 or n > 200:
                 raise Exception("Test station must be 0 to 200")
 
-        # merge all into a list of 2+(4*maxstations) strings/Nones
-        return tuple([buildid, comment] + sum([[str(x) for x in p]+[None for x in xrange(len(p),maxstations)] for p in [p1,p2,p3,p4]],[]))
+        # merge all into a list of other+(4*maxstations) strings/Nones
+        return tuple([buildid, comment, match] + [s for p in [p1, p2, p3, p4] for s in map(str,p)+[None]*(maxstations-len(p))])
 
     conn=psycopg2.connect('dbname=factory')
     cur=conn.cursor()
@@ -95,13 +99,13 @@ try:
                 "<button name=action value=insert>Save</button>" +
                 "</form>" )
         elif action[0] == 'insert':
-            cur.execute("insert into builds (buildid, comment " +
-                        "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +
+            cur.execute("insert into builds (buildid, comment, match " +
+                        "".join(", phase1[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase2[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase3[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase4[%d]" % (n+1) for n in range(maxstations)) +
                         ") values (" +
-                        ",".join(["%s"]*(2+(maxstations*4))) +
+                        ",".join(["%s"]*(other+(maxstations*4))) +
                         ")", getvalues(form))
             conn.commit()
             reload()
@@ -117,11 +121,11 @@ try:
             conn.commit()
             reload()
         elif action[0] == "edit":
-            cur.execute("select buildid, comment " +
-                        "".join(", phase1[%d]" % n for n in range(1,maxstations+1)) +\
-                        "".join(", phase2[%d]" % n for n in range(1,maxstations+1)) +\
-                        "".join(", phase3[%d]" % n for n in range(1,maxstations+1)) +\
-                        "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +\
+            cur.execute("select buildid, comment, match " +
+                        "".join(", phase1[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase2[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase3[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase4[%d]" % (n+1) for n in range(maxstations)) +
                         " from builds where buildid = %s", (action[1],))
             row = cur.fetchone()
             content = ("<form method=get>" +
@@ -130,11 +134,11 @@ try:
                        "<button name=action value='update=%s'>Update</button>" % escape(row[0]) +
                        "</form>")
         elif action[0] == "clone":
-            cur.execute("select '', comment " +
-                        "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +\
-                        "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +\
-                        "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +\
-                        "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +\
+            cur.execute("select '', comment, match " +
+                        "".join(", phase1[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase2[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase3[%d]" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase4[%d]" % (n+1) for n in range(maxstations)) +
                         " from builds where buildid = %s", (action[1],))
             row = cur.fetchone()
             content = ("<form method=get>" +
@@ -143,12 +147,12 @@ try:
                        "<button name=action value=insert>Save</button>" +
                        "</form>")
         elif action[0] == 'update':
-            values=getvalues(form)
-            cur.execute("update builds set comment=%s" +
-                        "".join(", phase1[%d]=%%s" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase2[%d]=%%s" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase3[%d]=%%s" % x for x in range(1,maxstations+1)) +
-                        "".join(", phase4[%d]=%%s" % x for x in range(1,maxstations+1)) +
+            values=getvalues(form, action[1])
+            cur.execute("update builds set comment=%s, match=%s" +
+                        "".join(", phase1[%d]=%%s" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase2[%d]=%%s" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase3[%d]=%%s" % (n+1) for n in range(maxstations)) +
+                        "".join(", phase4[%d]=%%s" % (n+1) for n in range(maxstations)) +
                         " where buildid=%s", values[1:]+(action[1],))
             conn.commit()
             reload()
@@ -179,11 +183,11 @@ try:
 
     if not content:
         # Generate the default page content
-        cur.execute("select buildid, comment" +
-                    "".join(", phase1[%d]" % x for x in range(1,maxstations+1)) +
-                    "".join(", phase2[%d]" % x for x in range(1,maxstations+1)) +
-                    "".join(", phase3[%d]" % x for x in range(1,maxstations+1)) +
-                    "".join(", phase4[%d]" % x for x in range(1,maxstations+1)) +
+        cur.execute("select buildid, comment, match" +
+                    "".join(", phase1[%d]" % (n+1) for n in range(maxstations)) +
+                    "".join(", phase2[%d]" % (n+1) for n in range(maxstations)) +
+                    "".join(", phase3[%d]" % (n+1) for n in range(maxstations)) +
+                    "".join(", phase4[%d]" % (n+1) for n in range(maxstations)) +
                     " from builds order by buildid")
         if not cur.rowcount:
             content = "No builds defined"
@@ -191,14 +195,15 @@ try:
             rows=cur.fetchall(); # get list of tuples
             content = table(("data",
                              [
-                                 ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Comment", "Tarball", "&nbsp;"]
+                                 ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Match", "Comment", "Tarball", "&nbsp;"]
                              ] +
                              [ [ row[0],
-                                 ", ".join(" ".join(escape(row[2:2+maxstations])).split()),
-                                 ", ".join(" ".join(escape(row[52:52+maxstations])).split()),
-                                 ", ".join(" ".join(escape(row[102:102+maxstations])).split()),
-                                 ", ".join(" ".join(escape(row[152:152+maxstations])).split()),
-                                 row[1],
+                                 ", ".join(" ".join(escape(row[other:other+maxstations])).split()),
+                                 ", ".join(" ".join(escape(row[other+maxstations:other+2*maxstations])).split()),
+                                 ", ".join(" ".join(escape(row[other+2*maxstations:other+3*maxstations])).split()),
+                                 ", ".join(" ".join(escape(row[other+3*maxstations:other+4*maxstations])).split()),
+				 '' if row[2] is None else row[2], # match
+                                 row[1], # comment
                                  fileinfo(row[0]),
                                  ( "<form method=get>" +
                                    "<button name=action value='edit=%s'>Edit</button>" % escape(row[0]) +
