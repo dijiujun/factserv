@@ -13,8 +13,8 @@ try:
             function update(url)
             {
                 // returned by 'stations' query
-                headers=["Station", "Device ID", "Build ID", "State", "Phase", "Current Test" ];
-                keys   =["station", "deviceid",  "buildid",  "state" ,"phase", "testname"];
+                headers = [ "Station", "Device ID", "Build ID", "Phase", "State", "Current Test" ];
+                keys    = [ "station", "deviceid",  "buildid", "phase", "state" , "testname"];
 
                 fetch("./query?what=stations")
                 .then(function(response) {
@@ -27,16 +27,16 @@ try:
                     for (var r = 0; r < result.length; r++) {
                         state=result[r]["state"]
                         if (state == "") {
-                            s+="<tr class='UNKNOWN'><td>"+result[r]["station"]+"</td><td colspan=6>No data</td>"
+                            s+="<tr class='UNKNOWN'><td>"+result[r]["station"]+"</td><td colspan=7>No data</td>"
                         } else {
                             s += "<tr class='"+(result[r]["stale"]?"STALE":state)+"'>"
                             for (var k = 0; k < keys.length; k++) {
                                 s+="<td>";
                                 switch(keys[k]) {
                                     case  "deviceid":
-                                        s += "<form method=get action=tests>" +
+                                        s += "<form method=get action=sessions>" +
                                              "<button class=click type=submit></button>" +
-                                             "<input type=hidden name='deviceid' value='"+escape(result[r]["deviceid"])+"'>" +
+                                             "<input type=hidden name='deviceid' value='"+result[r]["deviceid"]+"'>" +
                                              "<input type=hidden name='deviceid_type' value='='>" +
                                              "&nbsp;"+result[r]["deviceid"]+"</form>";
                                         break;
@@ -68,7 +68,7 @@ try:
                                                 s+=")";
                                             }
                                         } else {
-                                            s+="&nbsp;";
+                                            s+="---";
                                         }
                                         break;
 
@@ -92,11 +92,9 @@ try:
     """
 
     # print generated content
-    print html("Test Status", None, content)
+    print html("Current Status", None, content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"
     print
     traceback.print_exc(file = sys.stdout)
-    print
-    for k in sorted(form.keys()): print k,"=",form.getvalue(k)

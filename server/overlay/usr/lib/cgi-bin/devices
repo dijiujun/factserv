@@ -42,6 +42,7 @@ try:
         state_types=   {"=":"is",           "!=":"is not"}
         phase_types=   {"=":"is",           "!=":"is not"}
         station_types= {"=":"is",           "!=":"is not"}
+
         # get possible test states
         cur.execute("select unnest(enum_range(NULL::states))")
         states=[r[0] for r in cur.fetchall()]
@@ -100,15 +101,15 @@ try:
         content=("<form method=get>" +
                      table(("form",
                               [
-                                  ["Device ID", select("deviceid_type",deviceid_types, deviceid_type or "="),   "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
-                                  ["Build ID",  select("buildid_type", buildid_types, buildid_type or "="),     "<input type=text name=buildid value='%s'>" % escape(buildid)],
-                                  ["Created",   select("created_type", created_types, created_type or "="),     "<input type=text name=created value='%s'>" % escape(created)],
-                                  ["Updated",   select("updated_type", updated_types, updated_type or "="),     "<input type=text name=updated value='%s'>" % escape(updated)],
-                                  ["State",     select("state_type", state_types, state_type or "="),           select("state",{a:a for a in [""]+states}, state)],
-                                  ["Phase",     select("phase_type", phase_types, phase_type or "="),           "<input type=text name=phase value='%s'>" % escape(phase)],
-                                  ["Station",   select("station_type", station_types, station_type or "="),     "<input type=text name=station value='%s'>" % escape(station)],
-                                  ["Sort",      select("sort", {"asc":"ascending", "desc":"descending"}, sort), "(note, sorts on 'Updated')"],
-                                  ["Limit",     "<input type=text name=limit value='%s'>" % escape(limit),      "&nbsp"],
+                                  ["Device ID", select("deviceid_type",deviceid_types, deviceid_type or "="), "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
+                                  ["Build ID", select("buildid_type", buildid_types, buildid_type or "="), "<input type=text name=buildid value='%s'>" % escape(buildid)],
+                                  ["Created", select("created_type", created_types, created_type or "="), "<input type=text name=created value='%s'>" % escape(created)],
+                                  ["Updated", select("updated_type", updated_types, updated_type or "="), "<input type=text name=updated value='%s'>" % escape(updated)],
+                                  ["State", select("state_type", state_types, state_type or "="), select("state",{a:a for a in [""]+states}, state)],
+                                  ["Phase", select("phase_type", phase_types, phase_type or "="), "<input type=text name=phase value='%s'>" % escape(phase)],
+                                  ["Station", select("station_type", station_types, station_type or "="), "<input type=text name=station value='%s'>" % escape(station)],
+                                  ["Sort", select("sort", {"asc":"oldest first", "desc":"newest first"}, sort), ""],
+                                  ["Limit", "", "<input type=text name=limit value='%s'>" % escape(limit)],
                               ]
                           ))+
                      "<input style='float:left; vertical-align:text-bottom' type=submit value=Filter></form>"+
@@ -127,10 +128,18 @@ try:
             rows=cur.fetchall()
             content += table(("data",
                              [
-                                 ["Device ID","Build ID","Created","Updated","State","Phase","Station"]
+                                 [
+                                    help("Device ID", "Click the button to see the DUT's test sessions."),
+                                    "Build ID",
+                                    help("Created", "UCT time that the DUT first entered the system"),
+                                    help("Updated", "UCT time that the record for this DUT was last updated."),
+                                    help("State", "DUT's current test state. Click the button to reset it to 'UNKNOWN'."),
+                                    "Phase",
+                                    "Station"
+                                 ]
                              ] +
                              [( "STALE" if stale else state,
-                                 [ click(deviceid,"action=tests", {"deviceid":deviceid,"deviceid_type":"="}) ] +
+                                 [ click(deviceid,"action=sessions", {"deviceid":deviceid,"deviceid_type":"="}) ] +
                                  [ buildid, created, updated ] +
                                  [ click(state, None, {"action":"reset=%s" % deviceid}) if idle or stale else escape(state) ] +
                                  [ phase, station ]

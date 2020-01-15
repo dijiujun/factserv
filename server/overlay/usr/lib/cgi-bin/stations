@@ -39,6 +39,33 @@ try:
         comment=' '.join(form.getvalue('comment',default='').split())
         return (station, mac, fixture, comment)
 
+    def makeform(row):
+        row = escape(list(row) if row else [None for n in range(4)])
+        return table(("form", [
+            [ help("Station ID","""
+A number, 1 to 200. This is used as the last octet of the test station
+controller's IP address.
+                   """), row[0] if row[0] else "<input name=station type=text>" ],
+            [ help("Station MAC","""
+The ethernet MAC address of the test station controller which will be assigned
+this station ID.
+                   """), "<input name=mac type=text value='%s'>" % row[1] ],
+            [ help("Fixture","""
+A string passed to the test station controller when it boots, which tells it
+what code to run in order to control the attached test hardware.
+
+Leave it blank to let the test station controller operate in default
+hardware-less mode.
+
+Otherwise it must be the basename of a .tar.gz file in the downloads/fixtures
+directory.
+                   """),"<input name=fixture type=text value='%s'>" % row[2] ],
+            [ help("Comment","""
+This optional string appears in the station list, to help keep track of what
+each station is for.
+                    """), "<input name=comment type=text value='%s'>" % row[3] ]
+            ]))
+
     if 'action' in form:
         action=[form.getvalue('action'), None]
         if '=' in action[0]: action=action[0].split('=',1)
@@ -46,13 +73,7 @@ try:
             reload()
         elif action[0] == 'new':
             content = ("<form method=get>"+
-                        table(("form",
-                        [
-                            [ "Station ID",  "<input name=station type=text>" ],
-                            [ "Station MAC", "<input name=mac     type=text>" ],
-                            [ "Fixture",     "<input name=fixture type=text>" ],
-                            [ "Comment",     "<input name=comment type=text>" ]
-                        ]))+
+                        makeform(None)+
                         "<button name=action value='insert'>Save</button>" +
                         "</form>")
         elif action[0] == 'insert':
@@ -72,16 +93,10 @@ try:
                 reload()
         elif action[0] == 'edit':
             cur.execute("select station, mac, fixture, comment from stations where station = %s", (action[1],))
-            station, mac, fixture, comment = escape(cur.fetchone())
+            row = cur.fetchone()
             content = ("<form method=get>" +
-                        table(("form",
-                        [
-                            [ "Station ID",  station ],
-                            [ "Station MAC", "<input name=mac     type=text value='%s'>" % mac ],
-                            [ "Fixture",     "<input name=fixture type=text value='%s'>" % fixture ],
-                            [ "Comment",     "<input name=comment type=text value='%s'>" % comment ]
-                        ])) +
-                        "<button name=action value='update=%s'>Save</button>" % station +
+                        makeform(row) +
+                        "<button name=action value='update=%s'>Save</button>" % row[0] +
                         "</form>")
         elif action[0] == 'update':
             cur.execute('update stations set mac=%s, fixture=%s, comment=%s where station=%s', getvalues(form)[1:]+(action[1],))
@@ -116,7 +131,7 @@ try:
     # print generated content
     print html("Station Manager",
                "table.data tr:nth-child(even) { background: #CCCCCC; }",
-               content + tick_footer())
+               content)
 
 except:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

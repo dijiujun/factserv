@@ -6,7 +6,7 @@ import sys, os, base64, psycopg2, cgi, string
 class submitted(cgi.FieldStorage):
     def getvalue(self, key, default=None):
         v=cgi.FieldStorage.getvalue(self, key, default)
-        if isinstance(v,str): v=filter(lambda c: c in string.printable, v)
+        if isinstance(v,str): v=filter(lambda c: c in string.printable, v).strip()
         return v
 
 # return string, list, or tuple with html meta-characters escaped
@@ -75,23 +75,23 @@ def tick_footer():
         function tick()
         {
             let diff=Math.floor((new Date - start)/1000);
-            t='';
+            var t='';
             if (diff >= 86400)
             {
-                d = Math.floor(diff / 86400);
+                var d = Math.floor(diff / 86400);
                 t+=d+((d==1)?' day,':' days, ');
             }
             if (diff >= 3600)
             {
-                h =Math.floor((diff/ 3600) % 24);
+                var h =Math.floor((diff/ 3600) % 24);
                 t+=h+((h==1)?' hour,':' hours, ');
             }
             if (diff >= 60)
             {
-                m=Math.floor((diff / 60) % 60);
+                var m=Math.floor((diff / 60) % 60);
                 t+=m+((m==1)?' minute, ':' minutes, ');
             }
-            s=Math.floor(diff % 60);
+            var s=Math.floor(diff % 60);
             t+=s+((s==1)?' second':' seconds');
             document.getElementById('ticks').innerHTML = "("+t+" ago)"
         }
@@ -99,35 +99,65 @@ def tick_footer():
         </script>
     """
 
-# Givena title, optional styles, and html content, return
+# Return a span containg label and help text (appears on hover)
+def help(label, text):
+    return """<span class=help title="%s">%s</span>""" % (text.strip().replace('"','&quot;'),label.strip())
+
+# Given a title, optional styles, and html content, return
 # an html page with cache controls, title, footer, etc.
 def html(title, style, content):
     headers = ["Content-type: text/html; charset=utf-8","Cache-Control: no-cache,max-age:120,must-revalidate"]
-    s=("\n".join(headers) + "\n\n" + "<!DOCTYPE html>\n" +
-       """<html>
-          <head>
-          <nav>
-          <ul>
-              <li><a href="/cgi-bin/status">Test Status</a></li>
-              <li><a href="/cgi-bin/tests">Test History</a></li>
-              <li><a href="/cgi-bin/devices">Device History</a></li>
-              <li><a href="/cgi-bin/provisioned">Provisioned Data</a></li>
-              <li><a href="/cgi-bin/stations">Station Manager</a></li>
-              <li><a href="/cgi-bin/builds">Build Manager</a></li>
-              <li><a href="/index.html">Home</a></li>
-          </ul>
-          </nav>
-          <title>""" +  title + """</title>
-          <link href='/style.css' rel='stylesheet' type='text/css'/>
-          <style>""" + (style or "") + """</style>
-          </head>
-          <body>
-
-          <h2>""" + title + """</h2>
-          """ + content + """
-          </body>
-          </html>""")
-    return '\n'.join(map (lambda x:' '.join(x.split()),map(lambda x:x.strip(),s.split('\n'))))
+    s=("\n".join(headers) + "\n\n" +
+    "<!DOCTYPE html>\n" +
+    "<html> <head> <title>" + title + "</title></head>" +
+    """<style>
+        body { font-family: monospace; background-color: white; }
+        input { font-family: monospace; padding: 0; }
+        input[type=text] { width: 50ch; }
+        input.narrow[type=text] { width: 3ch; }
+        select { font-family: monospace; padding: 0; width: 100%; }
+        table td { padding: 4px 1ch; font-family: monospace; }
+        table.form { margin: 0; }
+        table.form td { white-space: nowrap; }
+        table.form td:nth-child(1) { text-align: right; font-weight: bold; }
+        table.data { border-collapse: collapse; }
+        table.data td { border: solid 1px black; max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        table.data tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
+        table.status { border-collapse: collapse; }
+        table.status td { border: solid 1px black; }
+        table.status tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
+        .PASSED { background-color: lightgreen; color: black; font-weight: bold }
+        .FAILED { background-color: #D00000; color: white; font-weight: bold; }
+        .FAILING { background-color: purple; color: white; font-weight: bold; }
+        .COMPLETE { background-color: green; color: white; font-weight: bold; }
+        .TESTING { background-color: blue; color: white; }
+        .UNKNOWN { background-color: grey; color: black; }
+        .STALE { background-color: yellow; color: black; font-weight: bold; }
+        button { padding: 1px; }
+        button.click { border: 1px outset black; background-color: white; padding: 0; height: 14px; width: 14px; vertical-align: top; }
+        button.click:hover { background-color: grey; }
+        div.footer { float: left; padding-bottom: 10px; }
+        div.footer form { float: left; }
+        /* div.footer button { font-size: 8px; float: left; } */
+        div.footer span { font-size: 12px; float: left; }
+        span.help { cursor: help; }
+        nav ul { list-style-type: none; margin: 0; padding: 0; overflow: hidden; background-color: black; }
+        nav li { float: left; border-right: 1px solid white; }
+        nav li:last-child { float: right; border-right: none; border-left: 1px solid white; }
+        nav li a { display: block; color: white; text-align: center; padding: 4px 16px; text-decoration: none; }
+        nav li a:hover { background-color: grey }
+    """ + (style or "") +
+    """ </style> <body> <nav> <ul>
+    <li><a href="/cgi-bin/status">Current Status</a></li>
+    <li><a href="/cgi-bin/devices">Device History</a></li>
+    <li><a href="/cgi-bin/sessions">Session History</a></li>
+    <li><a href="/cgi-bin/tests">Test History</a></li>
+    <li><a href="/cgi-bin/provisioned">Provisioned Data</a></li>
+    <li><a href="/cgi-bin/stations">Station Manager</a></li>
+    <li><a href="/cgi-bin/builds">Build Manager</a></li>
+    <li><a href="/index.html">Home</a></li>
+    </ul> </nav> <h2>""" + title + "</h2>" + content + "</body> </html>")
+    return "\n".join(" ".join(l.split()) for l in s.strip().splitlines())
 
 def plaintext(content):
     return "Content-type: text/plain; charset=utf-8\n\n" + content

@@ -95,6 +95,21 @@ create table tests (
 );
 grant select, update, insert, trigger on tests to factory;
 
+-- Test sessions, previously a special field in tests
+create table sessions (
+    id serial primary key,
+    deviceid varchar not null,
+    started timestamp not null default uct(),
+    ended timestamp,
+    station int not null,
+    phase int not null,
+    state states not NULL default 'UNKNOWN'
+);
+grant select, update, insert, trigger on sessions to factory;
+-- Move legacy session records to session table
+insert into sessions (deviceid, started, ended, station, phase, state) select deviceid, started, ended, station, phase, case when status=0 then 'PASSED'::states when status is NULL then 'TESTING'::states else 'FAILED'::states end from tests where testname = '*** SESSION ***';
+delete from tests where testname = '*** SESSION ***';
+
 -- also let factory increment serial counters
 grant usage,select on all sequences in schema public to factory;
 

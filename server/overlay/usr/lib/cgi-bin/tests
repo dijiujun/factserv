@@ -15,16 +15,20 @@ try:
 
     drill=form.getvalue("drill")
     if drill:
-        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, stdout from tests where id=%s",(drill,))
-        id, deviceid, started, ended, station, phase, testname, command, status,stdout=cur.fetchone()
-        content=table(("drill",[["ID",escape(id)],["Device ID",escape(deviceid)],["Started",escape(started)],["Ended",escape(ended)],["Station",escape(station)],
-                                ["Phase",escape(phase)],["Test Name",escape(testname)],["Command",escape(command)],["Status",status],["Output",escape(stdout, align=True)]]))
+        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, stdout, " +
+                    "ended is NULL and started < uct()-interval '10 minutes' as stale " +
+                    "from tests where id=%s",(drill,))
+
+        id, deviceid, started, ended, station, phase, testname, command, status, stdout, stale = cur.fetchone()
+        content=table(("drill",
+                        [["ID",escape(id)],["Device ID",escape(deviceid)],["Started",escape(started)],["Ended",escape(ended)],["Station",escape(station)],
+                        ["Phase",escape(phase)],["Test Name",escape(testname)],["Command",escape(command)],["Status",status],["Output",escape(stdout, align=True)]]))
 
     else:
 
         deviceid_types={"~":"contains",   "!~":"doesn't contain", "=":"is"}
-        started_types= {"<":"is before",  ">=":"is after"}
-        ended_types=   {"<":"is before",  ">=":"is after"}
+        started_types= {"<=":"is before", ">=":"is after"}
+        ended_types=   {"<=":"is before", ">=":"is after"}
         station_types= {"=":"is",         "!=":"is not"}
         phase_types=   {"=":"is",         "!=":"is not"}
         testname_types={"~":"contains",   "!~":"doesn't contain"}
@@ -66,11 +70,11 @@ try:
 
         if started:
             if started_type not in started_types: raise BadSubmit("Invalid started_type %s" % started_type)
-            where += [cur.mogrify("started %s %%s" % started_type, (started,))]
+            where += [cur.mogrify("date_trunc('seconds',started) %s %%s" % started_type, (started,))]
 
         if ended:
             if ended_type not in ended_types: raise BadSubmit("Invalid ended_type %s" % ended_type)
-            where += [cur.mogrify("ended %s %%s" % ended_type, (ended,))]
+            where += [cur.mogrify("date_trunc('seconds',ended) %s %%s" % ended_type, (ended,))]
 
         if station:
             if station_type not in station_types: raise BadSubmit("Invalid station_type %s" % station_type)
@@ -99,17 +103,17 @@ try:
         content=("<form method=get>" +
                     table(("form",
                         [
-                            ["Device ID", select("deviceid_type", deviceid_types, deviceid_type),          "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
-                            ["Started",   select("started_type", started_types, started_type),             "<input type=text name=started value='%s'>" % escape(started)],
-                            ["Ended",     select("ended_type", ended_types, ended_type),                   "<input type=text name=ended value='%s'>" % escape(ended)],
-                            ["Station",   select("station_type", station_types, station_type),             "<input type=text name=station value='%s'>" % escape(station)],
-                            ["Phase",     select("phase_type", phase_types, phase_type),                   "<input type=text name=phase value='%s'>" % escape(phase)],
-                            ["Test Name", select("testname_type", testname_types, testname_type),          "<input type=text name=testname value='%s'>" % escape(testname)],
-                            ["Command",   select("command_type", command_types, command_type),             "<input type=text name=command value='%s'>" % escape(command)],
-                            ["Status",    select("status_type", status_types, status_type),                "<input type=text name=status value='%s'>" % escape(status)],
-                            ["Stdout",    select("stdout_type", stdout_types, stdout_type),                "<input type=text name=stdout value='%s'>" % escape(stdout)],
-                            ["Sort",      select("sort", {"asc":"ascending", "desc":"descending"}, sort),  "(sorted by occurance)"],
-                            ["Limit",     "<input type=text name=limit value='%s'>" % limit,               "&nbsp"],
+                            ["Device ID", select("deviceid_type", deviceid_types, deviceid_type), "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
+                            ["Started", select("started_type", started_types, started_type), "<input type=text name=started value='%s'>" % escape(started)],
+                            ["Ended", select("ended_type", ended_types, ended_type), "<input type=text name=ended value='%s'>" % escape(ended)],
+                            ["Station", select("station_type", station_types, station_type), "<input type=text name=station value='%s'>" % escape(station)],
+                            ["Phase", select("phase_type", phase_types, phase_type), "<input type=text name=phase value='%s'>" % escape(phase)],
+                            ["Test Name", select("testname_type", testname_types, testname_type), "<input type=text name=testname value='%s'>" % escape(testname)],
+                            ["Command", select("command_type", command_types, command_type), "<input type=text name=command value='%s'>" % escape(command)],
+                            ["Status", select("status_type", status_types, status_type), "<input type=text name=status value='%s'>" % escape(status)],
+                            ["Output", select("stdout_type", stdout_types, stdout_type), "<input type=text name=stdout value='%s'>" % escape(stdout)],
+                            ["Sort", select("sort", {"asc":"oldest first", "desc":"newest first"}, sort),  ""],
+                            ["Limit", "", "<input type=text name=limit value='%s'>" % limit],
                         ])) +
                       "<input type=submit value='Filter' style='float:left; vertical-align:text-bottom'>"+
                  "</form>"+
@@ -129,12 +133,21 @@ try:
 
             content += table(("data",
                               [
-                                  ["Device ID", "Started","Ended","Station","Phase","Test Name","Command", "Status", "Output"]
+                                  [
+                                      help("Device ID", "Click the button to see extended status for the specific test."),
+                                      help("Started", "UCT time that the test started."),
+                                      help("Ended","UCT time that the test ended. If &quot;None&quot; the test is still in progress (or was aborted)."),
+                                      help("Station","Station that performed the test."),
+                                      "Phase",
+                                      "Test Name",
+                                      "Command",
+                                      help("Status", "The test's exit status, 0 indicates success, any other indicates failure."),
+                                      "Output"
+                                  ]
                               ] +
-                              [( (("FAILED" if status else "PASSED") if ended else "STALE" if stale else None) if not command else None,
-                                  [ click(deviceid,"action=devices",{'deviceid':escape(deviceid),'deviceid_type':'='}) ] +
-                                  [ started, ended, station, phase, testname, command, status ] +
-                                  [ (("FAILED" if status else "PASSED") if ended else None, click(stdout,None,{'drill':escape(id)}) if stdout else "") ]
+                              [( ("FAILED" if status else "PASSED") if ended else "STALE" if stale else "TESTING",
+                                  [ click(deviceid,"",{'drill':escape(id)}) ] +
+                                  [ started, ended, station, phase, testname, command, status, stdout ]
                                ) for id, deviceid, started, ended, station, phase, testname, command, status, stdout, stale in rows
                               ]
                             ))

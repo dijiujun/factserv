@@ -25,7 +25,7 @@ try:
             return "<div style='color:white; background-color:red'>NO FILE</div>"
 
     # make sure build ID is well formed, and maybe is in the database
-    # especially it must not contain filesystem meta-characters
+    # it must not contain filesystem meta-characters
     def validate(buildid, exists=False):
         if not buildid: raise Exception("Missing build ID")
         s=re.search('[^-_.a-zA-Z0-9]',buildid)
@@ -40,15 +40,66 @@ try:
     def makeform(row):
         row=escape(list(row) if row else [None for n in range(other + maxstations*4)])
         return table(("form",
-                      [
-                          ["Build ID",            "<input name=buildid type=text>" if row[0] == "" else escape(row[0])],
-                          ["Phase 1 stations",    ''.join("<input name=phase1-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*0]) for n in range(maxstations))],
-                          ["Phase 2 stations",    ''.join("<input name=phase2-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*1]) for n in range(maxstations))],
-                          ["Phase 3 stations",    ''.join("<input name=phase3-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*2]) for n in range(maxstations))],
-                          ["Phase 4 stations",    ''.join("<input name=phase4-%d type=text size=3 value='%s'>" % (n+1,row[other+n+maxstations*3]) for n in range(maxstations))],
-			  ["Match", 		   "<input name=match type=text value='%s'>" % escape(row[2])],
-                          ["Comment",              "<input name=comment type=text value='%s'>" % escape(row[1])]
-                      ]))
+            [
+                [help("Build ID","""
+A string provided by the DUT which uniquely represents its device type and
+software build.
+
+The build ID may only contain letters, digits, period, dash, and underscore,
+and may not start with a period.
+                """), row[0] if row[0] else "<input name=buildid type=text>"],
+
+                [help("Phase 1 stations","""
+Up to 50 test stations that are allowed to perform phase 1
+diagnostics for this build ID.<p>
+
+Phase 1 diagnostics are mandatory, so at least one test station
+                must be defined.
+                """), "".join("<input class=narrow name=phase1-%d type=text value='%s'>" % (n+1,row[other+n+maxstations*0]) for n in range(maxstations))],
+
+                [help("Phase 2 stations","""
+Up to 50 test stations that are allowed to perform phase 2 diagnostics for this
+build ID, if any.
+                """), "".join("<input class=narrow name=phase2-%d type=text value='%s'>" % (n+1,row[other+n+maxstations*1]) for n in range(maxstations))],
+
+                [help("Phase 3 stations","""
+Up to 50 test stations that are allowed to perform phase 3 diagnostics for this
+build ID, if any.
+
+Phase 3 test stations may only be defined if at least one phase 2 test station
+is defined.
+                """), "".join("<input class=narrow name=phase3-%d type=text value='%s'>" % (n+1,row[other+n+maxstations*2]) for n in range(maxstations))],
+
+                [help("Phase 4 stations","""
+Up to 50 test stations that are allowed to perform phase 4 diagnostics for this
+build ID, if any.
+
+Phase 4 test stations may only be defined if at least one phase 3 test station
+is defined.
+                """), "".join("<input class=narrow name=phase4-%d type=text value='%s'>" % (n+1,row[other+n+maxstations*3]) for n in range(maxstations))],
+
+                [help("Match","""
+An optional POSIX regular expression.
+
+If a DUT's build ID is not found in the database, the system will look for a
+record with a matching regex.
+
+If exactly one match is found, then the parameters and diagnostic tarball of
+the matched record will be used for that DUT. All log entries will report the
+DUTs actual build ID.
+
+The intention is to allow creation of a generic diagnostic configuration which
+can be used across multiple builds.
+
+Note the regex is head-anchored, i.e. a &quot;^&quot; is implicitly pre-pended to the
+regex and should not be specified.
+"""), "<input name=match type=text value='%s'>" % row[2]],
+
+                [help("Comment", """
+An optional string that appears in the build list, to help keep track of what
+each one is for.
+                """), "<input name=comment type=text value='%s'>" % row[1]]
+            ]))
 
     # return validated list of (buildid, comment, match, phase1[], phase2[], phase3[], phase4[]) from the submitted form
     def getvalues(form, buildid=None):
@@ -73,8 +124,8 @@ try:
             raise Exception("Can't specify phase 4 test stations without phase 3")
 
         for n in tuple(p1+p2+p3+p4):
-            if n < 0 or n > 200:
-                raise Exception("Test station must be 0 to 200")
+            if n < 1 or n > 200:
+                raise Exception("Test station must be 1 to 200")
 
         # merge all into a list of other+(4*maxstations) strings/Nones
         return tuple([buildid, comment, match] + [s for p in [p1, p2, p3, p4] for s in map(str,p)+[None]*(maxstations-len(p))])
@@ -134,7 +185,7 @@ try:
                        "<button name=action value='update=%s'>Update</button>" % escape(row[0]) +
                        "</form>")
         elif action[0] == "clone":
-            cur.execute("select '', comment, match " +
+            cur.execute("select '', comment, '' " +
                         "".join(", phase1[%d]" % (n+1) for n in range(maxstations)) +
                         "".join(", phase2[%d]" % (n+1) for n in range(maxstations)) +
                         "".join(", phase3[%d]" % (n+1) for n in range(maxstations)) +
@@ -195,7 +246,9 @@ try:
             rows=cur.fetchall(); # get list of tuples
             content = table(("data",
                              [
-                                 ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Match", "Comment", "Tarball", "&nbsp;"]
+                                 ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Match", "Comment",
+                                  help("Tarball", "Information about the tarball associated with the build ID (click 'Upload' to add or update it')"),
+                                  "&nbsp;"]
                              ] +
                              [ [ row[0],
                                  ", ".join(" ".join(escape(row[other:other+maxstations])).split()),
@@ -219,7 +272,7 @@ try:
     # print generated content
     print html("Build Manager",
                "table.data tr:nth-child(even) { background: #CCCCCC; }",
-               content + tick_footer())
+               content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

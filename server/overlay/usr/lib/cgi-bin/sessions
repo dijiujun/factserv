@@ -1,0 +1,128 @@
+#!/usr/bin/python2
+
+import traceback, sys, os, re, psycopg2
+from util import *
+
+class BadSubmit(Exception): pass
+
+try:
+    conn=psycopg2.connect('dbname=factory')
+    cur=conn.cursor()
+
+    form=submitted()
+
+    deviceid_types={"~":"contains",   "!~":"doesn't contain", "=":"is"}
+    started_types= {"<":"is before",  ">=":"is after"}
+    ended_types=   {"<":"is before",  ">=":"is after"}
+    station_types= {"=":"is",         "!=":"is not"}
+    state_types=   {"=":"is",           "!=":"is not"}
+    phase_types=   {"=":"is",         "!=":"is not"}
+
+    # get possible test states
+    cur.execute("select unnest(enum_range(NULL::states))")
+    states=[r[0] for r in cur.fetchall()]
+
+    # possible session states
+    deviceid=form.getvalue('deviceid')
+    deviceid_type=form.getvalue('deviceid_type') or "~"
+    started=form.getvalue('started')
+    started_type=form.getvalue('started_type') or ">="
+    ended=form.getvalue('ended')
+    ended_type=form.getvalue('ended_type') or ">="
+    state=form.getvalue('state')
+    state_type=form.getvalue('state_type') or "="
+    station=form.getvalue('station')
+    station_type=form.getvalue('station_type') or "="
+    phase=form.getvalue('phase')
+    phase_type=form.getvalue('phase_type') or "="
+
+    sort=form.getvalue('sort') or 'desc'
+    limit=form.getvalue('limit') or "100"
+
+    if state:
+        state=state.upper()
+        if state not in states: raise Exception("Invalid state %s" % state)
+
+    where=[]
+
+    if deviceid:
+        if deviceid_type not in deviceid_types: raise BadSubmit("Invalid deviceid_type %s" % deviceid_type)
+        where += [cur.mogrify("lower(deviceid) %s lower(%%s)" % deviceid_type, (deviceid,))]
+
+    if started:
+        if started_type not in started_types: raise BadSubmit("Invalid started_type %s" % started_type)
+        where += [cur.mogrify("started %s %%s" % started_type, (started,))]
+
+    if ended:
+        if ended_type not in ended_types: raise BadSubmit("Invalid ended_type %s" % ended_type)
+        where += [cur.mogrify("ended %s %%s" % ended_type, (ended,))]
+
+    if station:
+        if station_type not in station_types: raise BadSubmit("Invalid station_type %s" % station_type)
+        where += [cur.mogrify("station %s %%s" % station_type, (station,))]
+
+    if state:
+        if state_type not in state_types: raise Exception("Invalid state_type %s" % (state_type,))
+        where += [cur.mogrify("state %s %%s" % (state_type,) ,(state,))]
+
+    if phase:
+        if phase_type not in phase_types: raise BadSubmit("Invalid phase_type %s" % phase_type)
+        where += [cur.mogrify("phase %s %%s" % phase_type, (phase,))]
+
+    content=("<form method=get>" +
+             table(("form",
+             [
+                 ["Device ID", select("deviceid_type", deviceid_types, deviceid_type), "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
+                 ["Started", select("started_type", started_types, started_type), "<input type=text name=started value='%s'>" % escape(started)],
+                 ["Ended", select("ended_type", ended_types, ended_type), "<input type=text name=ended value='%s'>" % escape(ended)],
+                 ["State", select("state_type", state_types, state_type or "="), select("state",{a:a for a in [""]+states}, state)],
+                 ["Phase", select("phase_type", phase_types, phase_type), "<input type=text name=phase value='%s'>" % escape(phase)],
+                 ["Station", select("station_type", station_types, station_type), "<input type=text name=station value='%s'>" % escape(station)],
+                 ["Sort", select("sort", {"asc":"oldest first", "desc":"newest first"}, sort),  ""],
+                 ["Limit", "", "<input type=text name=limit value='%s'>" % limit],
+             ])) +
+             "<input type=submit value='Filter' style='float:left; vertical-align:text-bottom'>" +
+             "</form>" +
+             "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
+             "<hr>")
+
+    cur.execute("select deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, state, " +
+                "ended is NULL and started < uct()-interval '10 minutes' as stale " +
+                "from sessions " +
+                ("where " + " and ".join(where) if where else "") +
+                " order by started %s limit %s" % (sort, limit))
+    if not cur.rowcount:
+        content += "No match!"
+
+    else:
+        rows=cur.fetchall()
+
+        content += table(("data",
+                            [ [
+                                help("Device ID", "Click the button to list the tests in the session."),
+                                help("Started", "UCT time that the session started."),
+                                help("Ended", "UCT time that the session ended. If &quot;None&quot; the session is still in progress (or has aborted)"),
+                                help("Station", "The station that performed the session."),
+                                help("Phase", "The session's test phase, 1-4."),
+                                help("State", "The session's current/ending state.")
+                            ] ] +
+                            [
+                                (
+                                    "STALE" if stale else state,
+                                    [ click(deviceid,"action=tests",{'deviceid':escape(deviceid),'deviceid_type':'=',
+                                                                     'started':started, 'started_type':'>=',
+                                                                     'ended':ended, 'ended_type':'<='}) ] +
+                                    [ started, ended, station, phase, state ]
+                                ) for deviceid, started, ended, station, phase, state, stale in rows
+                            ]
+                        ))
+
+    # print generated content
+    print html("Session History", "", content + tick_footer())
+
+except:
+    print "Content-type: text/plain\n\nAn error has occurred"
+    print
+    traceback.print_exc(file = sys.stdout)
+    print
+    for k in sorted(form.keys()): print k,"=",form.getvalue(k)

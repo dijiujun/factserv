@@ -5,7 +5,7 @@
 
 try:
 
-    import traceback, os, cgi, sys, psycopg2
+    import traceback, os, cgi, sys, psycopg2, re
 
     sys.stderr = sys.stdout
     # print "Content-type: text/plain\n" # enable for debug only
@@ -37,15 +37,13 @@ try:
     if dut_ip is None: raise Exception("Can't find 'dut_ip' in /etc/factory/config")
     if factory_id is None: raise Exception("Can't find 'factory_id' in /etc/factory/config")
 
-
-    station = None
     try:
         remote = os.environ["REMOTE_ADDR"]
     except:
         remote="127.0.0.1"
 
     if remote == "127.0.0.1" or remote == dut_ip:
-        station = 0
+        station = '0'
         fixture = ""
     else:
         prefix=".".join(dut_ip.split(".")[0:3])+"."
@@ -66,17 +64,29 @@ try:
     # build["phaseX"] is true if phase X is enabled on the requesting station
     # build["hasphaseX"] is true if phase X is enabled on *any* station
     def checkbuild(buildid):
+        s=re.search('[^-_.a-zA-Z0-9]',buildid)
+        if s: raise Exception("Build ID cannot contain '%s'" % s.group())
+        if buildid.startswith('.'): raise Exception("Build ID cannot start with '.'")
         # look for the exact buildid
         cur.execute("select buildid from builds where buildid=%s", (buildid,))
         if not cur.rowcount:
-            # if that doesn't work, look for longest 'match' regex, note '^' is prepended
-            cur.execute("select buildid from builds where %s ~ ('^'||match) order by buildid desc limit 1", (buildid,))
-            if not cur.rowcount: raise Exception("Invalid buildid '%s'" % buildid)
+            # if that doesn't work, look for 'match' regex, note '^' is prepended
+            # there must be exactly one match to proceed
+            cur.execute("select buildid from builds where %s ~ ('^'||match)", (buildid,))
+            if cur.rowcount < 1: raise Exception("Invalid buildid '%s'" % buildid)
+            if cur.rowcount > 1: raise Exception("Invalid buildid '%s' (too many matches)" % buildid)
+
         actualid=cur.fetchone()[0]
         # postgres array syntax is borked
-        cur.execute("select %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), " +
-                    "0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL " +
-                    "from builds where buildid=%s", (station, station, station, station, actualid))
+        if station != '0':
+            cur.execute("select %s=any(phase1), %s=any(phase2), %s=any(phase3), %s=any(phase4), " +
+                        "0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL " +
+                        "from builds where buildid=%s", (station, station, station, station, actualid))
+        else:
+            cur.execute("select 0!=any(phase1), 0!=any(phase2), 0!=any(phase3), 0!=any(phase4), " +
+                        "0=all(phase2) is not NULL, 0=all(phase3) is not NULL, 0=all(phase4) is not NULL " +
+                        "from builds where buildid=%s", (actualid,))
+
         build={"actualid":actualid}
         build["phase1"],build["phase2"],build["phase3"],build["phase4"],build["hasphase2"],build["hasphase3"],build["hasphase4"]=cur.fetchone()
         if not (build["phase1"] or build["phase2"] or build["phase3"] or build["phase4"]): raise Exception("Buildid %s (%s) not enabled for station %s" % (buildid, actualid, station))
@@ -143,7 +153,7 @@ try:
             if phase == 1 and not build["phase1"]: raise Exception("can't perform phase %s or any predecessor for buildid %s (%s) on station %s" % (p, buildid, build["actualid"], station))
             cur.execute("update devices set state='TESTING', phase=%s, station=%s, buildid=%s  where deviceid=%s", (phase, station, buildid, deviceid))
         # add an entry into the test table
-        cur.execute("insert into tests (deviceid, station, phase, command, testname) values (%s, %s, %s, %s, %s) returning id", (deviceid, station, phase, "", "*** SESSION ***"))
+        cur.execute("insert into sessions (deviceid, station, phase, state) values (%s, %s, %s, %s) returning id", (deviceid, station, phase, 'TESTING'))
         conn.commit()
         ok="%d %s" % (phase, cur.fetchone()[0])
 
@@ -191,8 +201,10 @@ try:
         if not cur.rowcount: raise Exception("No record for deviceid %s" % deviceid)
         state, phase, buildid = cur.fetchone()
 
-        if state == "FAILING":
-            state = "FAILED"
+        cur.execute("select 1 from sessions where id=%s and deviceid=%s and state='TESTING'",(sessionid, deviceid))
+        if not cur.rowcount: raise Exception("No active session for sessionid=%s, deviceid=%s" % (sessionid, deviceid))
+
+        if state == "FAILING": state = "FAILED"
         elif state == 'TESTING':
             build = checkbuild(buildid)
             if (phase==1 and build["hasphase2"]) or (phase==2 and build["hasphase3"]) or (phase==3 and build["hasphase4"]):
@@ -204,7 +216,7 @@ try:
         cur.execute("update devices set state=%s where deviceid=%s", (state, deviceid))
         conn.commit()
 
-        cur.execute("update tests set ended=uct(), status=%d where id=%s" % (-2 if state=="FAILED" else 0, sessionid))
+        cur.execute("update sessions set ended=uct(), state=%s where id=%s", (state, sessionid))
         conn.commit()
         ok="%s %s" % (state, phase)
 
@@ -246,6 +258,6 @@ except Exception:
     print "Status: 400 %s: %s (line %d)\nContent-type: text/plain\n" % (str(t), str(v), tb.tb_lineno)
     # other output will appear if you use curl
     traceback.print_exc(file = sys.stdout)
-    if station is not None: print "Station ID:",station
+    print "Station ID:",station
     for k in sorted(os.environ): print k,"=",os.environ[k]
     for k in sorted(form.keys()): print k,"=",form.getvalue(k)
