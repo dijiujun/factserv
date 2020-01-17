@@ -244,7 +244,7 @@ each one is for.
             content = "No builds defined"
         else:
             rows=cur.fetchall(); # get list of tuples
-            content = table(("data",
+            content = table(("list",
                              [
                                  ["Build ID", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Match", "Comment",
                                   help("Tarball", "Information about the tarball associated with the build ID (click 'Upload' to add or update it')"),
@@ -270,9 +270,7 @@ each one is for.
         content += "<p><form method=get><button name=action value=new>New build</button></form>"
 
     # print generated content
-    print html("Build Manager",
-               "table.data tr:nth-child(even) { background: #CCCCCC; }",
-               content)
+    print html("Build Manager", content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

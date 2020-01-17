@@ -21,25 +21,31 @@ try:
 
         id, deviceid, started, ended, station, phase, testname, command, status, stdout, stale = cur.fetchone()
         content=table(("drill",
-                        [["ID",escape(id)],["Device ID",escape(deviceid)],["Started",escape(started)],["Ended",escape(ended)],["Station",escape(station)],
+                        [["Test ID",escape(id)],["Device ID",escape(deviceid)],["Started",escape(started)],["Ended",escape(ended)],["Station",escape(station)],
                         ["Phase",escape(phase)],["Test Name",escape(testname)],["Command",escape(command)],["Status",status],["Output",escape(stdout, align=True)]]))
 
     else:
-
-        deviceid_types={"~":"contains",   "!~":"doesn't contain", "=":"is"}
-        started_types= {"<=":"is before", ">=":"is after"}
-        ended_types=   {"<=":"is before", ">=":"is after"}
-        station_types= {"=":"is",         "!=":"is not"}
-        phase_types=   {"=":"is",         "!=":"is not"}
-        testname_types={"~":"contains",   "!~":"doesn't contain"}
-        command_types= {"~":"contains",   "!~":"doesn't contain"}
-        status_types=  {"=":"is",         "!=":"is not"}
-        stdout_types=  {"~":"contains",   "!~":"doesn't contain"}
+        
+        testid_types =    {"=":"is",         "!=":"is not"}
+        sessionid_types = {"=":"is",         "!=":"is not"}
+        deviceid_types  = {"~":"contains",   "!~":"doesn't contain", "=":"is"}
+        started_types   = {"<=":"is before", ">=":"is after"}
+        ended_types     = {"<=":"is before", ">=":"is after"}
+        station_types   = {"=":"is",         "!=":"is not"}
+        phase_types     = {"=":"is",         "!=":"is not"}
+        testname_types  = {"~":"contains",   "!~":"doesn't contain"}
+        command_types   = {"~":"contains",   "!~":"doesn't contain"}
+        status_types    = {"=":"is",         "!=":"is not"}
+        stdout_types    = {"~":"contains",   "!~":"doesn't contain"}
 
         # get possible test states
         cur.execute("select unnest(enum_range(NULL::states))")
         states=[r[0] for r in cur.fetchall()]
 
+        testid=form.getvalue('testid')
+        testid_type=form.getvalue('testid_type') or "="
+        sessionid=form.getvalue('sessionid')
+        sessionid_type=form.getvalue('sessionid_type') or "="
         deviceid=form.getvalue('deviceid')
         deviceid_type=form.getvalue('deviceid_type') or "~"
         started=form.getvalue('started')
@@ -58,11 +64,18 @@ try:
         status_type=form.getvalue('status_type') or "="
         stdout=form.getvalue('stdout')
         stdout_type=form.getvalue('stdout_type') or "~"
-
         sort=form.getvalue('sort') or 'desc'
         limit=form.getvalue('limit') or "100"
 
         where=[]
+
+        if testid:
+            if testid_type not in testid_types: raise BadSubmit("Invalid testid_type %s" % testid_type)
+            where += [cur.mogrify("id %s %%s" % testid_type, (testid,))]
+        
+        if sessionid:
+            if sessionid_type not in sessionid_types: raise BadSubmit("Invalid sessionid_type %s" % sessionid_type)
+            where += [cur.mogrify("sessionid %s %%s" % sessionid_type, (sessionid,))]
 
         if deviceid:
             if deviceid_type not in deviceid_types: raise BadSubmit("Invalid deviceid_type %s" % deviceid_type)
@@ -112,6 +125,8 @@ try:
                             ["Command", select("command_type", command_types, command_type), "<input type=text name=command value='%s'>" % escape(command)],
                             ["Status", select("status_type", status_types, status_type), "<input type=text name=status value='%s'>" % escape(status)],
                             ["Output", select("stdout_type", stdout_types, stdout_type), "<input type=text name=stdout value='%s'>" % escape(stdout)],
+                            ["Test ID", select("testid_type", testid_types, testid_type), "<input type=text name=testid value='%s'>" % escape(testid)],
+                            ["Session ID", select("sessionid_type", sessionid_types, sessionid_type), "<input type=text name=sessionid value='%s'>" % escape(sessionid)],
                             ["Sort", select("sort", {"asc":"oldest first", "desc":"newest first"}, sort),  ""],
                             ["Limit", "", "<input type=text name=limit value='%s'>" % limit],
                         ])) +
@@ -120,7 +135,7 @@ try:
                  "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
                  "<hr>")
 
-        cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, split_part(stdout,E'\n',1), " +
+        cur.execute("select id, sessionid, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, testname, command, status, split_part(stdout,E'\n',1), " +
                     "ended is NULL and started < uct()-interval '10 minutes' as stale " +
                     "from tests " +
                     ("where " + " and ".join(where) if where else "") +
@@ -134,33 +149,29 @@ try:
             content += table(("data",
                               [
                                   [
-                                      help("Device ID", "Click the button to see extended status for the specific test."),
+                                      "Device ID",
                                       help("Started", "UCT time that the test started."),
                                       help("Ended","UCT time that the test ended. If &quot;None&quot; the test is still in progress (or was aborted)."),
-                                      help("Station","Station that performed the test."),
+                                      "Station",
                                       "Phase",
                                       "Test Name",
                                       "Command",
                                       help("Status", "The test's exit status, 0 indicates success, any other indicates failure."),
-                                      "Output"
+                                      "Output",
+                                      help("Session ID", "Click for session history."),  
+                                      help("Test ID","Click for full test status.")
                                   ]
                               ] +
                               [( ("FAILED" if status else "PASSED") if ended else "STALE" if stale else "TESTING",
-                                  [ click(deviceid,"",{'drill':escape(id)}) ] +
-                                  [ started, ended, station, phase, testname, command, status, stdout ]
-                               ) for id, deviceid, started, ended, station, phase, testname, command, status, stdout, stale in rows
+                                  [ deviceid, started, ended, station, phase, testname, command, status, stdout ] +
+                                  [ click(sessionid,"action=sessions",{'sessionid':sessionid, 'sessionid_type':'='}) ] +
+                                  [ click(id,"",{'drill':escape(id)}) ] 
+                               ) for id, sessionid, deviceid, started, ended, station, phase, testname, command, status, stdout, stale in rows
                               ]
                             ))
 
     # print generated content
-    print html("Test History",
-               """
-                table.drill { border-collapse: collapse; }
-                table.drill td { border: solid 1px; }
-                table.drill td:nth-child(1) { font-weight: bold; }
-                table.drill td:nth-child(2) { white-space: pre; }
-               """,
-               content + tick_footer())
+    print html("Test History", content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

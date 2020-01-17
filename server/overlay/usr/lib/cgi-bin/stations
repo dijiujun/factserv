@@ -112,7 +112,7 @@ each station is for.
             content = "No stations!"
         else:
             rows=cur.fetchall()
-            content = table(("data",
+            content = table(("list",
                               [
                                   ["Station","MAC","Fixture","Comment","&nbsp;"]
                               ] +
@@ -129,9 +129,7 @@ each station is for.
         content += "<p><form method=get><button name=action value=new>New station</button></form>"
 
     # print generated content
-    print html("Station Manager",
-               "table.data tr:nth-child(even) { background: #CCCCCC; }",
-               content)
+    print html("Station Manager", content)
 
 except:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

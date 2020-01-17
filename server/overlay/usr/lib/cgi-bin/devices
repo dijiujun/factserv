@@ -148,7 +148,7 @@ try:
                            ))
 
     # print generated content with tick footer
-    print html("Device History", None, content + tick_footer())
+    print html("Device History", content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

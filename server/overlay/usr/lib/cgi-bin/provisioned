@@ -16,10 +16,10 @@ try:
     cur.execute("select %s from provisioned order by updated desc" % ','.join(columns))
     rows=cur.fetchall()
 
-    content=table(("data",[titles]+[list(r) for r in rows]))
+    content=table(("list",[titles]+[list(r) for r in rows]))
 
     # print generated content
-    print html("Provisioned Data", None, content + tick_footer())
+    print html("Provisioned Data", content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

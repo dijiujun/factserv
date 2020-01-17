@@ -7,14 +7,14 @@ from util import *
 try:
 
     content="""
-        <table class=status id=main> </table>
+        <table class=data id=main> </table>
 
         <script>
             function update(url)
             {
                 // returned by 'stations' query
-                headers = [ "Station", "Device ID", "Build ID", "Phase", "State", "Current Test" ];
-                keys    = [ "station", "deviceid",  "buildid", "phase", "state" , "testname"];
+                headers = [ "Session ID", "Station", "Device ID", "Build ID", "Phase", "State", "Time",    "Test",    ];
+                keys    = [ "session",    "station", "deviceid",  "buildid",  "phase", "state", "started", "testname" ];
 
                 fetch("./query?what=stations")
                 .then(function(response) {
@@ -26,47 +26,61 @@ try:
                     s+="</tr>";
                     for (var r = 0; r < result.length; r++) {
                         state=result[r]["state"]
+                        stale=result[r]["stale"]
+                        sessionid=result[r]["sessionid"]
                         if (state == "") {
-                            s+="<tr class='UNKNOWN'><td>"+result[r]["station"]+"</td><td colspan=7>No data</td>"
+                            s+="<tr class='UNKNOWN'><td>N/A</td><td>"+result[r]["station"]+"</td><td colspan=6>No data</td>"
                         } else {
-                            s += "<tr class='"+(result[r]["stale"]?"STALE":state)+"'>"
+                            s += "<tr class='" + (stale ? "STALE" : state) + "'>"
                             for (var k = 0; k < keys.length; k++) {
                                 s+="<td>";
                                 switch(keys[k]) {
-                                    case  "deviceid":
-                                        s += "<form method=get action=sessions>" +
+                                    case "session":
+                                        s += "<form method=get action=tests>" +
                                              "<button class=click type=submit></button>" +
-                                             "<input type=hidden name='deviceid' value='"+result[r]["deviceid"]+"'>" +
-                                             "<input type=hidden name='deviceid_type' value='='>" +
-                                             "&nbsp;"+result[r]["deviceid"]+"</form>";
+                                             "<input type=hidden name='sessionid' value='"+sessionid+"'>" +
+                                             "<input type=hidden name='sessionid_type' value='='> " +
+                                             sessionid + 
+                                             "</form>";
                                         break;
 
                                     case "testname":
                                         if (state == "TESTING" || state == "FAILING") {
-                                            s+=result[r]['testname'];
-                                            let diff=Math.ceil(result[r]["elapsed"]);
-                                            if (diff > 30)
+                                            if (result[r]['testname'])
                                             {
-                                                s += " (";
-                                                if (diff >= 86400)
+                                                s+=result[r]['testname'];
+                                            }    
+                                            else
+                                            {
+                                                s+="---";
+                                            }    
+                                            if (!stale)
+                                            {
+
+                                                let diff=result[r]["elapsed"];
+                                                if (diff > 30)
                                                 {
-                                                    n = Math.floor(diff / 86400);
-                                                    s+=n+((n==1)?" day,":" days, ");
+                                                    s += " (";
+                                                    if (diff >= 86400)
+                                                    {
+                                                        n = Math.floor(diff / 86400);
+                                                        s+=n+((n==1)?" day,":" days, ");
+                                                    }
+                                                    if (diff >= 3600)
+                                                    {
+                                                        n =Math.floor((diff/ 3600) % 24);
+                                                        s+=n+((n==1)?" hour,":" hours, ");
+                                                    }
+                                                    if (diff >= 60)
+                                                    {
+                                                        n=Math.floor((diff / 60) % 60);
+                                                        s+=n+((n==1)?" minute, ":" minutes, ");
+                                                    }
+                                                    n=Math.floor(diff % 60);
+                                                    s+=n+((n==1)?" second":" seconds");
+                                                    s+=")";
                                                 }
-                                                if (diff >= 3600)
-                                                {
-                                                    n =Math.floor((diff/ 3600) % 24);
-                                                    s+=n+((n==1)?" hour,":" hours, ");
-                                                }
-                                                if (diff >= 60)
-                                                {
-                                                    n=Math.floor((diff / 60) % 60);
-                                                    s+=n+((n==1)?" minute, ":" minutes, ");
-                                                }
-                                                n=Math.floor(diff % 60);
-                                                s+=n+((n==1)?" second":" seconds");
-                                                s+=")";
-                                            }
+                                            }        
                                         } else {
                                             s+="---";
                                         }
@@ -92,7 +106,7 @@ try:
     """
 
     # print generated content
-    print html("Current Status", None, content)
+    print html("Current Status", content)
 
 except Exception as e:
     print "Content-type: text/plain; charset=utf-8\n\nAn error has occurred"

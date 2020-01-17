@@ -110,6 +110,21 @@ grant select, update, insert, trigger on sessions to factory;
 insert into sessions (deviceid, started, ended, station, phase, state) select deviceid, started, ended, station, phase, case when status=0 then 'PASSED'::states when status is NULL then 'TESTING'::states else 'FAILED'::states end from tests where testname = '*** SESSION ***';
 delete from tests where testname = '*** SESSION ***';
 
+-- add sessionid to tests table and populate 
+alter table tests add sessionid int;
+do language plpgsql $$
+declare s record;
+begin
+    for s in select id, deviceid, started, ended from sessions where ended is not null order by id desc
+    loop
+        update tests t set sessionid = s.id where t.sessionid is null and t.deviceid = s.deviceid and t.started >= s.started and t.ended <= s.ended;
+    end loop;
+    for s in select id, deviceid, started from sessions where ended is null order by id desc
+    loop
+        update tests t set sessionid = s.id where t.sessionid is null and t.deviceid = s.deviceid and t.started >= s.started;
+    end loop;
+end$$;
+
 -- also let factory increment serial counters
 grant usage,select on all sequences in schema public to factory;
 

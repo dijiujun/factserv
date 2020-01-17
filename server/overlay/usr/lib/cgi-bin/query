@@ -24,34 +24,30 @@ try:
         # return current server time
         cur.execute("select date_trunc('second',uct()) as now")
 
-    elif what == 'old':
-        # return latest device for each station
-        cur.execute("""
-            select s.station,
-                   d.deviceid, d.buildid, date_trunc('second',d.updated) as updated, d.state, d.phase
-            from devices d
-            join (select station, max(updated) as updated from devices group by station) l on d.station=l.station and d.updated=l.updated
-            right join stations s on d.station = s.station
-            order by station""")
-
     elif what == 'stations':
-        # return latest test info for each station
+        # return list of stations with latest session information
         cur.execute("""
-            select s.station, s.comment,
-                   t.deviceid, date_trunc('second',t.started) as started,
-                   case when ended is null then
-                        extract(epoch from uct()-t.started)
-                   else
-                        extract(epoch from t.ended-t.started)
-                   end as elapsed,
-                   t.testname, t.status,
-                   d.state, d.phase, d.buildid,
-                   t.ended is null and t.started < uct() - interval '10 minutes' as stale
-            from tests as t
-            join (select station, max(started) as started from tests group by station) as j on t.station=j.station and t.started=j.started
-            join devices as d on t.deviceid = d.deviceid and t.station=d.station
-            right join stations as s on s.station=t.station
-            order by s.station """)
+            select *, state = 'TESTING' and elapsed > 600 as stale from (
+                select 
+                    se.id as sessionid,
+                    st.station,
+                    se.deviceid, 
+                    de.buildid,
+                    se.phase, 
+                    se.state,
+                    date_trunc('seconds',se.started) as started,
+                    te.testname,
+                    se.id as sessionid,
+                    floor(case when te.started is null 
+                          then extract(epoch from uct()-se.started) 
+                          else extract(epoch from uct()-te.started) 
+                          end) as elapsed
+                from (select distinct on (station) * from sessions where station != 0 order by station, started desc) se
+                join devices de on se.deviceid = de.deviceid
+       		left join (select distinct on (station) * from tests order by station, started desc) te on te.sessionid = se.id
+                right join stations st on st.station = se.station
+        ) q order by station 
+        """)
 
     elif what == 'device':
         # return device status

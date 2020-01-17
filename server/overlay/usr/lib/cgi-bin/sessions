@@ -11,18 +11,21 @@ try:
 
     form=submitted()
 
-    deviceid_types={"~":"contains",   "!~":"doesn't contain", "=":"is"}
-    started_types= {"<":"is before",  ">=":"is after"}
-    ended_types=   {"<":"is before",  ">=":"is after"}
-    station_types= {"=":"is",         "!=":"is not"}
-    state_types=   {"=":"is",           "!=":"is not"}
-    phase_types=   {"=":"is",         "!=":"is not"}
+    sessionid_types= {"=":"is",         "!=":"is not"}
+    deviceid_types = {"~":"contains",   "!~":"doesn't contain", "=":"is"}
+    started_types  = {"<":"is before",  ">=":"is after"}
+    ended_types    = {"<":"is before",  ">=":"is after"}
+    station_types  = {"=":"is",         "!=":"is not"}
+    state_types    = {"=":"is",         "!=":"is not"}
+    phase_types    = {"=":"is",         "!=":"is not"}
 
     # get possible test states
     cur.execute("select unnest(enum_range(NULL::states))")
     states=[r[0] for r in cur.fetchall()]
 
     # possible session states
+    sessionid=form.getvalue('sessionid')
+    sessionid_type=form.getvalue('sessionid_type') or "="
     deviceid=form.getvalue('deviceid')
     deviceid_type=form.getvalue('deviceid_type') or "~"
     started=form.getvalue('started')
@@ -44,6 +47,10 @@ try:
         if state not in states: raise Exception("Invalid state %s" % state)
 
     where=[]
+
+    if sessionid:
+        if sessionid_type not in sessionid_types: raise BadSubmit("Invalid sessionid_type %s" % sessionid_type)
+        where += [cur.mogrify("id %s %%s" % sessionid_type, (sessionid,))]
 
     if deviceid:
         if deviceid_type not in deviceid_types: raise BadSubmit("Invalid deviceid_type %s" % deviceid_type)
@@ -72,6 +79,7 @@ try:
     content=("<form method=get>" +
              table(("form",
              [
+                 ["Session ID", select("sessionid_type", sessionid_types, sessionid_type), "<input type=text name=sessionid value='%s'>" % escape(sessionid)],
                  ["Device ID", select("deviceid_type", deviceid_types, deviceid_type), "<input type=text name=deviceid value='%s'>" % escape(deviceid)],
                  ["Started", select("started_type", started_types, started_type), "<input type=text name=started value='%s'>" % escape(started)],
                  ["Ended", select("ended_type", ended_types, ended_type), "<input type=text name=ended value='%s'>" % escape(ended)],
@@ -86,7 +94,7 @@ try:
              "<form method=get><input type=submit value=Reset style='vertical-align:text-bottom'></form>" +
              "<hr>")
 
-    cur.execute("select deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, state, " +
+    cur.execute("select id, deviceid, date_trunc('seconds',started), date_trunc('seconds',ended), station, phase, state, " +
                 "ended is NULL and started < uct()-interval '10 minutes' as stale " +
                 "from sessions " +
                 ("where " + " and ".join(where) if where else "") +
@@ -99,26 +107,25 @@ try:
 
         content += table(("data",
                             [ [
-                                help("Device ID", "Click the button to list the tests in the session."),
+                                help("Session ID", "Click the button to list the tests in the session."),
+                                "Device ID",
                                 help("Started", "UCT time that the session started."),
                                 help("Ended", "UCT time that the session ended. If &quot;None&quot; the session is still in progress (or has aborted)"),
-                                help("Station", "The station that performed the session."),
-                                help("Phase", "The session's test phase, 1-4."),
-                                help("State", "The session's current/ending state.")
+                                "Station",
+                                "Phase",
+                                "State",
                             ] ] +
                             [
                                 (
                                     "STALE" if stale else state,
-                                    [ click(deviceid,"action=tests",{'deviceid':escape(deviceid),'deviceid_type':'=',
-                                                                     'started':started, 'started_type':'>=',
-                                                                     'ended':ended, 'ended_type':'<='}) ] +
-                                    [ started, ended, station, phase, state ]
-                                ) for deviceid, started, ended, station, phase, state, stale in rows
+                                    [ click(sessionid,"action=tests",{'sessionid':escape(sessionid),'sessionid_type':'='}) ] +
+                                    [ deviceid, started, ended, station, phase, state ]
+                                ) for sessionid, deviceid, started, ended, station, phase, state, stale in rows
                             ]
                         ))
 
     # print generated content
-    print html("Session History", "", content + tick_footer())
+    print html("Session History", content + tick_footer())
 
 except:
     print "Content-type: text/plain\n\nAn error has occurred"

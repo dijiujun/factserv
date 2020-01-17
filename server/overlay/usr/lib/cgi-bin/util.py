@@ -103,29 +103,44 @@ def tick_footer():
 def help(label, text):
     return """<span class=help title="%s">%s</span>""" % (text.strip().replace('"','&quot;'),label.strip())
 
-# Given a title, optional styles, and html content, return
-# an html page with cache controls, title, footer, etc.
-def html(title, style, content):
+# Given a title and html content, return an html page with cache controls
+def html(title, content):
     headers = ["Content-type: text/html; charset=utf-8","Cache-Control: no-cache,max-age:120,must-revalidate"]
-    s=("\n".join(headers) + "\n\n" +
-    "<!DOCTYPE html>\n" +
-    "<html> <head> <title>" + title + "</title></head>" +
-    """<style>
+    s=("\n".join(headers) + "\n\n<!DOCTYPE html>\n" +
+    """<html>
+    <head> 
+        <title>""" + title + """</title>
+    </head>
+    <style>
         body { font-family: monospace; background-color: white; }
-        input { font-family: monospace; padding: 0; }
+        input { font-family: monospace; padding: 1px; }
         input[type=text] { width: 50ch; }
         input.narrow[type=text] { width: 3ch; }
-        select { font-family: monospace; padding: 0; width: 100%; }
-        table td { padding: 4px 1ch; font-family: monospace; }
-        table.form { margin: 0; }
+        select { font-family: monospace; padding: 1px; width: 100%; }
+        button { padding: 1px; }
+
+        table td { padding: 2px 1ch 2px 2px; }
+
+        /* search forms, three columns */        
+        table.form { margin: 0; border-collapse: separate; border-spacing: 0; box-sizing: content-box; }
         table.form td { white-space: nowrap; }
-        table.form td:nth-child(1) { text-align: right; font-weight: bold; }
-        table.data { border-collapse: collapse; }
-        table.data td { border: solid 1px black; max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        table.data tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
-        table.status { border-collapse: collapse; }
-        table.status td { border: solid 1px black; }
-        table.status tr:first-child td { font-weight: bold; position: sticky; top: 0; background-color: white; box-shadow: 0 0 0 1px black; }
+        table.form td:first-child { text-align: right; font-weight: bold; }
+      
+        /* list and data */
+        table.list, table.data { border-collapse: separate; border-spacing: 0; }
+        table.list td, table.data td { border-left: 1px solid black; border-bottom: 1px solid black; max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        table.list tr:first-child td, table.data tr:first-child td { border-top: 1px solid black; font-weight: bold; position: sticky; top: 0; background-color: white; }
+        table.list td:last-child, table.data td:last-child { border-right: 1px solid black; }
+        /* list is striped */
+        table.list tr:nth-child(even) { background: #CCCCCC; }
+       
+        /* test drill, 2 columns */
+        table.drill { border-collapse: collapse; }
+        table.drill td { border: 1px solid black; }
+        table.drill td:first-child { font-weight: bold; }
+        table.drill td:last-child { white-space: pre; }
+       
+        /* color by state */
         .PASSED { background-color: lightgreen; color: black; font-weight: bold }
         .FAILED { background-color: #D00000; color: white; font-weight: bold; }
         .FAILING { background-color: purple; color: white; font-weight: bold; }
@@ -133,30 +148,40 @@ def html(title, style, content):
         .TESTING { background-color: blue; color: white; }
         .UNKNOWN { background-color: grey; color: black; }
         .STALE { background-color: yellow; color: black; font-weight: bold; }
-        button { padding: 1px; }
+
+        /* in-table buttons */
         button.click { border: 1px outset black; background-color: white; padding: 0; height: 14px; width: 14px; vertical-align: top; }
         button.click:hover { background-color: grey; }
+
+        /* used by tick footer */    
         div.footer { float: left; padding-bottom: 10px; }
         div.footer form { float: left; }
-        /* div.footer button { font-size: 8px; float: left; } */
         div.footer span { font-size: 12px; float: left; }
+
+        /* question marks on clickable headers */
         span.help { cursor: help; }
+
+        /* nav bar across the top of every page */
         nav ul { list-style-type: none; margin: 0; padding: 0; overflow: hidden; background-color: black; }
         nav li { float: left; border-right: 1px solid white; }
         nav li:last-child { float: right; border-right: none; border-left: 1px solid white; }
         nav li a { display: block; color: white; text-align: center; padding: 4px 16px; text-decoration: none; }
         nav li a:hover { background-color: grey }
-    """ + (style or "") +
-    """ </style> <body> <nav> <ul>
-    <li><a href="/cgi-bin/status">Current Status</a></li>
-    <li><a href="/cgi-bin/devices">Device History</a></li>
-    <li><a href="/cgi-bin/sessions">Session History</a></li>
-    <li><a href="/cgi-bin/tests">Test History</a></li>
-    <li><a href="/cgi-bin/provisioned">Provisioned Data</a></li>
-    <li><a href="/cgi-bin/stations">Station Manager</a></li>
-    <li><a href="/cgi-bin/builds">Build Manager</a></li>
-    <li><a href="/index.html">Home</a></li>
-    </ul> </nav> <h2>""" + title + "</h2>" + content + "</body> </html>")
+
+    </style> 
+    <body> 
+        <nav> <ul>
+        <li><a href="/cgi-bin/status">Current Status</a></li>
+        <li><a href="/cgi-bin/devices">Device History</a></li>
+        <li><a href="/cgi-bin/sessions">Session History</a></li>
+        <li><a href="/cgi-bin/tests">Test History</a></li>
+        <li><a href="/cgi-bin/provisioned">Provisioned Data</a></li>
+        <li><a href="/cgi-bin/stations">Station Manager</a></li>
+        <li><a href="/cgi-bin/builds">Build Manager</a></li>
+        <li><a href="/index.html">Home</a></li>
+        </ul> </nav> 
+        <h2>""" + title + "</h2>" + content + 
+    "</body> </html>")
     return "\n".join(" ".join(l.split()) for l in s.strip().splitlines())
 
 def plaintext(content):
