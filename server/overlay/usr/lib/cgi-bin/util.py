@@ -108,24 +108,25 @@ def html(title, content):
     headers = ["Content-type: text/html; charset=utf-8","Cache-Control: no-cache,max-age:120,must-revalidate"]
     s=("\n".join(headers) + "\n\n<!DOCTYPE html>\n" +
     """<html>
-    <head> 
+    <head>
         <title>""" + title + """</title>
     </head>
     <style>
         body { font-family: monospace; background-color: white; }
-        input { font-family: monospace; padding: 1px; }
+        input { font-family: monospace; margin: 0 1px 0 0; border: 1px solid black; padding: 1px; }
         input[type=text] { width: 50ch; }
         input.narrow[type=text] { width: 3ch; }
-        select { font-family: monospace; padding: 1px; width: 100%; }
-        button { padding: 1px; }
+        select { font-family: monospace; width: 100%; margin: 0; border: 1px solid black; padding: 1px;}
+        button, input[type=submit] {margin: 0 2px 0 0; border: 1px solid black; padding: 1px; }
 
-        table td { padding: 2px 1ch 2px 2px; }
+        table td { padding: 2px; }
 
-        /* search forms, three columns */        
+        /* search forms, three columns */
         table.form { margin: 0; border-collapse: separate; border-spacing: 0; box-sizing: content-box; }
         table.form td { white-space: nowrap; }
-        table.form td:first-child { text-align: right; font-weight: bold; }
-      
+        table.form td:first-child { text-align: right; font-weight: bold; width: 11ch; padding: 0 1ch 0 0; }
+
+
         /* list and data */
         table.list, table.data { border-collapse: separate; border-spacing: 0; }
         table.list td, table.data td { border-left: 1px solid black; border-bottom: 1px solid black; max-width: 50ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -133,13 +134,13 @@ def html(title, content):
         table.list td:last-child, table.data td:last-child { border-right: 1px solid black; }
         /* list is striped */
         table.list tr:nth-child(even) { background: #CCCCCC; }
-       
+
         /* test drill, 2 columns */
         table.drill { border-collapse: collapse; }
         table.drill td { border: 1px solid black; }
         table.drill td:first-child { font-weight: bold; }
         table.drill td:last-child { white-space: pre; }
-       
+
         /* color by state */
         .PASSED { background-color: lightgreen; color: black; font-weight: bold }
         .FAILED { background-color: #D00000; color: white; font-weight: bold; }
@@ -153,7 +154,7 @@ def html(title, content):
         button.click { border: 1px outset black; background-color: white; padding: 0; height: 14px; width: 14px; vertical-align: top; }
         button.click:hover { background-color: grey; }
 
-        /* used by tick footer */    
+        /* used by tick footer */
         div.footer { float: left; padding-bottom: 10px; }
         div.footer form { float: left; }
         div.footer span { font-size: 12px; float: left; }
@@ -168,8 +169,8 @@ def html(title, content):
         nav li a { display: block; color: white; text-align: center; padding: 4px 16px; text-decoration: none; }
         nav li a:hover { background-color: grey }
 
-    </style> 
-    <body> 
+    </style>
+    <body>
         <nav> <ul>
         <li><a href="/cgi-bin/status">Current Status</a></li>
         <li><a href="/cgi-bin/devices">Device History</a></li>
@@ -179,8 +180,8 @@ def html(title, content):
         <li><a href="/cgi-bin/stations">Station Manager</a></li>
         <li><a href="/cgi-bin/builds">Build Manager</a></li>
         <li><a href="/index.html">Home</a></li>
-        </ul> </nav> 
-        <h2>""" + title + "</h2>" + content + 
+        </ul> </nav>
+        <h2>""" + title + "</h2>" + content +
     "</body> </html>")
     return "\n".join(" ".join(l.split()) for l in s.strip().splitlines())
 
