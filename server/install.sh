@@ -66,12 +66,12 @@ fi
 
 # Install packages
 export DEBIAN_FRONTEND=noninteractive
-apt update
-apt upgrade
+apt update -q
+apt upgrade -q
 # mandatory
-apt install -y apache2 curl dnsmasq iptables-persistent postgresql python-psycogreen resolvconf sudo
+apt install -qy apache2 curl dnsmasq iptables-persistent postgresql python-psycogreen resolvconf sudo
 # extras
-apt install -y arping links mlocate net-tools psmisc smartmontools sysstat tcpdump tmux vim
+apt install -qy arping links mlocate net-tools psmisc smartmontools sysstat tcpdump tmux vim
 
 # Copy overlay files to root, backup existing
 for f in $(find $here/overlay -type f,l -printf "%P\n"); do
@@ -103,9 +103,10 @@ chown -R factory: ~factory/
 chmod -R go= ~factory/.ssh
 chown root:root /var/www/html/downloads
 chmod 777 /var/www/html/downloads
+rm -f /home/factory/downloads
 
-echo "Configuring postgresql, ignore 'already exists' and 'does not exist' errors on reinstall"
-su -lc "psql -f /etc/factory/schema.txt" postgres
+echo "Configuring postgresql"
+su -lc "psql -f /etc/factory/schema.txt" postgres 2>&1 | egrep -v 'ERROR:.*(already exists|does not exist)'
 
 # configure Apache
 a2enmod cgi
