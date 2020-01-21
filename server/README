@@ -50,13 +50,13 @@ Install Debian:
 
     Set domain name to "localdomain".
 
-    Set a root password. Password strength is not super important since the
-    only access to the system is via ssh key.
+    Set root password to "factory". Password strength is not important since
+    the only remove access to the system will via ssh key, and the system will be
+    physically inaccessible in production.
 
     Leave the full name for new user blank.
 
-    Set the username to "factory". Again, the password strength is not
-    important, just using "factory" is acceptable.
+    Set the username to "factory", with password "factory". 
 
     Set the default time zone (it will be changed to UCT later).
 
@@ -98,11 +98,11 @@ Install Debian:
     media and hit enter.
 
 The system will reboot. When the "factory login:" prompt appears, log in as
-"factory":
+"factory" with password "factory":
 
 First become root:
 
-    > su - (enter the root password)
+    > su - (password is "factory")
 
 (Note the use of '>' in this document indicates a command to be entered.)
 
