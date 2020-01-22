@@ -172,8 +172,7 @@ Before deploying the server to the factory, production keys must be installed.
 The production keys are HIGHLY CONFIDENTIAL and secure practices must be used
 when handling them.
 
-All production servers use the same ssl key. They can use different ssh keys,
-although this may become a key management issue.
+All production servers for a given product must use the same ssl key. They can
+all use different ssh keys, although this becomes a key management issue.
 
 Key generation process is not in scope of this document.
-

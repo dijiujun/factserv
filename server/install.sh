@@ -1,6 +1,33 @@
 #!/bin/bash -eu
 
 die() { echo "$*" >&2; exit 1; }
+
+id factory >/dev/null || die "Cannot install on this system"
+
+usage() 
+{
+    die "\
+Usage:
+
+    $0 [options]
+
+Install or uninstall factory server. Options are:
+
+   -b  - backup database to /var/factory.backup.*.gz
+   -u  - uninstall server
+   -p  - purge packages, if already uninstalled
+   -i  - install server, if not already installed
+
+Actions will be performed in the order listed here. 
+
+To do a fresh install, use './install -i'.
+
+To update an existing install (after git pull), use 'install.sh -ui'.
+
+To completely uninstall use 'install.sh -up' but note the database will remain
+intact." 
+}
+
 ((!UID)) || die "Must be root"
 
 # mandatory packages
@@ -11,62 +38,40 @@ PACKAGES+=(arping links mlocate net-tools psmisc smartmontools sysstat tcpdump t
 
 install=
 uninstall=
+purge=
 backup=
-force=
 
-# execute given command as postgres user
-postgres() { su -lc "$*" postgres; }
-
-if ((!$#)); then
-    install=1
-else
-    while getopts "bfiuU" o; do case $o in
-        b) backup=1 ;;
-        f) force=1 ;;
-        i) install=1 ;;
-        u) uninstall=1 ;;
-        U) uninstall=2 ;;
-        *) die "\
-Usage:
-
-    $0 [options]
-
-Install or uninstall factory server. Options are:
-
-   -b  - backup database to /var/factory.backup.gz* before anything else
-   -i  - install server if not already installed
-   -u  - uninstall server, if currently installed
-   -U  - uninstall server if currently installed, and purge packages
-   -f  - ignore current install state, dangerous!
-
-Database will not be deleted uninstall.
-
-Default is '-i' if no options given.
-
-To update the currently installed code, use '-ui'.";;
-    esac; done
-fi
+(($#)) || usage
+while getopts "bipu" o; do case $o in
+    b) backup=1 ;;
+    i) install=1 ;;
+    u) uninstall=1 ;;
+    p) purge=1 ;;
+    *) usage ;;
+esac; done
 
 # read the config file
 here=${0%/*}
 source $here/install.cfg
-# check what's required for uninstall, the rest are below
 [[ -n ${dut_interface:-} ]] || die "install.cfg does not define 'dut_interface'"
+[[ -n ${factory_interface:-} ]] || die "install.cfg does not define 'factory_interface'"
+[[ -n ${dut_ip:-} ]] || die "install.cfg does not define 'dut_ip'"
+[[ -n ${factory_id:-} ]] || die "install.cfg does not define 'factory_id'"
+[[ -n ${organization:-} ]] || die "install.cfg does not define 'organization'"
+
+# execute given command as postgres user
+postgres() { 
+    id postgres >/dev/null || die "postgresql is not installed"
+    su -lc "$*" postgres
+}
 
 if ((backup)); then
-    target=/var/factory.backup.gz
-    if [ -e $target ]; then
-        n=1
-        while [ -e $target.$n ]; do ((n++)); done
-        target+=.$n
-    fi
-    echo "Backing up to $target"
-    postgres pg_dump factory | gzip > $target
+    tmp=$(mktemp /var/factory.backup.XXXXXXXX.gz) || die "mktemp failed"
+    echo "Backing up database to $tmp..."
+    postgres pg_dump factory | gzip -9 > $tmp
 fi
 
 if ((uninstall)); then
-
-    ((force)) || [ -e /etc/factory/installed ] || die "Not installed, try '$0'"
 
     ifdown $dut_interface || true
 
@@ -103,20 +108,24 @@ if ((uninstall)); then
         rm -f /$f~
     done
 
-    if ((uninstall > 1)); then
-        echo "Removing packages"    
-        export DEBIAN_FRONTEND=noninteractive
-        apt -qy purge ${PACKAGES[@]}
-        apt -qy autoremove --purge
-    fi
-
     echo "###################"
     echo "Uninstall complete!"
 fi
 
-if ((install)); then
+if ((purge)); then
+    ! [ -d /etc/factory ] || die "Currently installed, try '$0 -up' to uninstall and purge pacakges."
+    echo "Purging packages"    
 
-    ((force)) || ! [ -d /etc/factory ] || die "Already installed, try '$0 -ui' to update."
+    export DEBIAN_FRONTEND=noninteractive
+    apt -qy remove --purge --autoremove ${PACKAGES[@]}
+    apt -qy autoremove --purge
+
+    echo "###############"
+    echo "Purge complete!"
+fi
+
+if ((install)); then
+    ! [ -d /etc/factory ] || die "Already installed, try '$0 -ui' to update."
 
     [[ -n ${factory_interface:-} ]] || die "install.cfg does not define 'factory_interface'"
     [[ -n ${dut_ip:-} ]] || die "install.cfg does not define 'dut_ip'"
@@ -136,7 +145,7 @@ if ((install)); then
     apt -qy upgrade
     apt -qy install -qy ${PACKAGES[@]}
 
-    echo "Install overlay"
+    echo "Installing overlay"
     for f in $(find $here/overlay -type f,l -printf "%P\n"); do
 
         # create directory if needed
@@ -147,7 +156,7 @@ if ((install)); then
 
         cp -vP $here/overlay/$f /$f
 
-        echo "Rewriting special tags"
+        # rewriting special tags
         [ -h /$f ] ||
         sed -i "s/FACTORY_INTERFACE/$factory_interface/g;
                 s/DUT_INTERFACE/$dut_interface/g;
