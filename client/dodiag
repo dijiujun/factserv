@@ -1,8 +1,18 @@
 #!/usr/bin/python
+# Note this script can be run with python2 or python3
 # DO NOT REMOVE THIS LINE - coding: utf-8
 
 # This is the DUT test executive, runs on the target.
-import traceback, os, sys, httplib, urllib, getopt, subprocess, threading, signal, time
+import traceback, os, sys, getopt, subprocess, threading, signal, time
+from __future__ import print_function, division
+
+try:
+    import http.client.HTTPConnmection as HTTPConnection        
+    import urllib.parse.urlencode as urlencode
+    from functools import reduce
+except:
+    import httplib.HTTPConnection as HTTPConnection
+    import url.encode as urlencode        
 
 # Test status messages, in various lanuages
 test_in_progress='\n'.join(["Test in progress", "Pruebas en curso", "正在测试中"])
@@ -14,20 +24,20 @@ try:
     buildID=sys.argv[1]
     deviceID=sys.argv[2]
 except:
-    print """\
+    print("""\
 Usage:
 
     dodiag buildID deviceID
 
 Interact with factory server and perform diagnostics.
-"""
+""")
     sys.exit(1)
 
 class PionicFail(Exception): pass
 # Send a request to the pionic controller, return response
 # If data is provided, it is will sent as raw POST content
 def pionic(request, data=None, debug=0):
-    c=httplib.HTTPConnection("pionic.server")
+    c=HTTPConnection("pionic.server")
     c.set_debuglevel(debug)
     if data is None:
         c.request("GET","/"+request)
@@ -54,9 +64,9 @@ def report(text, fg="white", bg="blue"):
 class FactoryFail(Exception): pass
 def factory(service, options={}, debug=0):
     options["service"]=service
-    c=httplib.HTTPConnection("pionic.server",port=61080)
+    c=HTTPConnection("pionic.server",port=61080)
     c.set_debuglevel(debug)
-    options=urllib.urlencode(options)
+    options=urlencode(options)
     if len(options)<512:
         # Prefer GET so there's a log, but use POST if the URL is very long
         c.request("GET","/cgi-bin/factory?%s"%options)
@@ -70,7 +80,7 @@ def factory(service, options={}, debug=0):
 # perform an arbitrary shell command with timeout, return exit status and
 # command's stdout/stderr
 def perform(command, timeout):
-    print "Starting '%s' for max %d seconds..." % (command, timeout)
+    print("Starting '%s' for max %d seconds..." % (command, timeout))
     # Support any shell command, let the shell be session leader so os.killpg can kill it and its children
     # Note we also add '.' to the PATH
     p = subprocess.Popen(["/bin/sh","-c",command],stdout=subprocess.PIPE,stderr=subprocess.STDOUT, preexec_fn=os.setsid, env=dict(os.environ,PATH='.'+os.pathsep+os.environ["PATH"]))
@@ -88,17 +98,17 @@ def perform(command, timeout):
     if expired:
         stdout+="\nTIMEOUT\n"
         if not status: status=-99
-    print "Status:",status
-    print "Stdout:"
-    for l in stdout.splitlines(): print "  ",l
+    print("Status:",status)
+    print("Stdout:")
+    for l in stdout.splitlines(): print("  ",l)
     return (status, stdout)
 
 # This is the main test loop
 try:
     report(test_in_progress)
 
-    print "Build ID is", buildID
-    print "Device ID is", deviceID
+    print("Build ID is", buildID)
+    print("Device ID is", deviceID)
 
     # Pass info to test processes in the environment
     os.environ["BUILDID"]=buildID
@@ -107,7 +117,7 @@ try:
     phase, sessionID = factory("startsession",{"deviceid":deviceID, "buildid":buildID}).split()[0:2]
 
     
-    print "Performing test phase", phase
+    print("Performing test phase", phase)
     script="phase%s" % phase
 
     # flags that can be set or cleared by testlist
@@ -246,5 +256,5 @@ except:
 # No exit!
 finally:
     while True:
-        print "Reboot now"
+        print("Reboot now")
         time.sleep(30)
