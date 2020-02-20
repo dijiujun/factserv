@@ -5,7 +5,7 @@
 
 try:
 
-    import traceback, os, cgi, sys, psycopg2, re
+    import traceback, os, cgi, sys, psycopg2, re, base64, struct
 
     sys.stderr = sys.stdout
     # print "Content-type: text/plain\n" # enable for debug only
@@ -116,16 +116,23 @@ try:
         buildid = require("buildid")
         build = checkbuild(buildid)
         if not build["phase1"]: raise Exception("New device is disallowed for buildid %s (%s) on station %s" % (buildid, build["actualid"], station))
-        # Then return a theoretically unique 12-digit device ID in form "FFSSNNNNNNNN"
-        # Where:
+        # Then return 6-byte device ID as string "FFSSNNNNNNNN", where:
         #   FF is factory ID in hex (from the config file)
         #   SS is station ID in hex (from the IP address)
         #   NNNNNNNN is epoch time in hex (from the database uct())
-        # Assumes:
-        #   a) the server clock is correct, and
-        #   b) can't test two boards on the same test station in the same second
+        # This should be unique, assuming:
+        #   The server clock is correct,
+        #   Board-specific decorations will be applied,
+        #   No two factories for this board have the same factory ID,
+        #   The same test station can't test two different boards in the same second
+        # If base64=1, the ID will be encoded as eight base64 characters instead
+        # (including A-Z, a-z, 0-9, - and _).
         cur.execute("select floor(extract(epoch from uct()))")
-        ok="{:02X}{:02X}{:08X}".format(int(factory_id), int(station), int(cur.fetchone()[0]))
+        s=struct.pack(">BBI",int(factory_id), int(station), int(cur.fetchone()[0]))
+        if form.getvalue("base64"): 
+            ok=base64.b64encode(s,"-_")
+        else: 
+            ok=base64.b16encode(s)
 
     elif service == "startsession":
         # Start diagnostic session for given device.
