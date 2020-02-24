@@ -52,7 +52,7 @@ try:
     elif what == 'device':
         # return device status
         deviceid=form.getvalue('deviceid')
-        cur.execute("select deviceid, buildid, state, phase, station, date_trunc('second',created) as created, date_trunc('second',updated) as updated, from devices where deviceid=%s", (deviceid,))
+        cur.execute("select deviceid, buildid, state, phase, station, date_trunc('second',created) as created, date_trunc('second',updated) as updated from devices where deviceid=%s", (deviceid,))
 
     else:
         raise Exception("Invalid status request '%s'" % what)
