@@ -15,7 +15,7 @@ curl="curl -qsSf"
 # given forground and background colors, and up to 24 character text, display pionic badge
 badge() {
     [ -z "$(echo -e)" ] && echo="echo -e" || echo="echo"
-    $echo $3 | $curl -qsSf --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2&size=60" || die "Display update failed"
+    $echo $3 | $curl -qsSf --data-binary @- "http://pionic.server/display?text&badge&fg=$1&bg=$2" || die "Display update failed"
 }
 
 # spin forever, after writing an error screen

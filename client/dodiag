@@ -38,15 +38,11 @@ def pionic(request, data=None, debug=0):
         raise PionicFail("%s in service %s" % (r.reason, request))
     return r.read().strip()
 
-# wrap text to specified width
-def wrap(text, width=42):
-    return reduce(lambda line, word: '%s%s%s' % (line, ' \n'[(len(line)-line.rfind('\n')-1 + len(word.split('\n',1)[0]) >= width)], word), text.split(' '))
-
 class DisplayFail(Exception): pass
-# display message in ULH corner of screen
+# display message in ULH corner of screen, note it
 def report(text, fg="white", bg="blue"):
     try:
-        pionic("display?text&size=30&fg=%s&bg=%s"%(fg,bg),wrap(text, width=42))
+        pionic("display?text&fg=%s&bg=%s"%(fg,bg),text)
     except Exception as e:
         raise DisplayFail(e)
 
@@ -106,7 +102,7 @@ try:
 
     phase, sessionID = factory("startsession",{"deviceid":deviceID, "buildid":buildID}).split()[0:2]
 
-    
+
     print "Performing test phase", phase
     script="phase%s" % phase
 

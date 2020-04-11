@@ -129,9 +129,9 @@ try:
         # (including A-Z, a-z, 0-9, - and _).
         cur.execute("select floor(extract(epoch from uct()))")
         s=struct.pack(">BBI",int(factory_id), int(station), int(cur.fetchone()[0]))
-        if form.getvalue("base64"): 
+        if form.getvalue("base64"):
             ok=base64.b64encode(s,"-_")
-        else: 
+        else:
             ok=base64.b16encode(s)
 
     elif service == "startsession":
@@ -184,7 +184,7 @@ try:
             # else verify it
             cur.execute("select deviceid=%s and state='TESTING' and station=%s from sessions where id=%s", (deviceid, station, sessionid))
             if not cur.fetchone()[0]: raise Exception("Session %s in the wrong state for device %s on station %s" % (sessionid, deviceid, station))
-            
+
         cur.execute("insert into tests (deviceid, station, phase, command, testname, sessionid) values (%s, %s, %s, %s, %s, %s) returning id", (deviceid, station, phase, command, testname, sessionid))
         conn.commit()
         ok = cur.fetchone()[0] # returns the test id
