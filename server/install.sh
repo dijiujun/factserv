@@ -4,7 +4,7 @@ die() { echo "$*" >&2; exit 1; }
 
 id factory >/dev/null || die "Cannot install on this system"
 
-usage() 
+usage()
 {
     die "\
 Usage:
@@ -18,14 +18,14 @@ Install or uninstall factory server. Options are:
    -p  - purge packages, if already uninstalled
    -i  - install server, if not already installed
 
-Actions will be performed in the order listed here. 
+Actions will be performed in the order listed here.
 
 To do a fresh install, use './install -i'.
 
 To update an existing install (after git pull), use 'install.sh -ui'.
 
 To completely uninstall use 'install.sh -up' but note the database will remain
-intact." 
+intact."
 }
 
 ((!UID)) || die "Must be root"
@@ -60,7 +60,7 @@ source $here/install.cfg
 [[ -n ${organization:-} ]] || die "install.cfg does not define 'organization'"
 
 # execute given command as postgres user
-postgres() { 
+postgres() {
     id postgres >/dev/null || die "postgresql is not installed"
     su -lc "$*" postgres
 }
@@ -90,8 +90,9 @@ if ((uninstall)); then
 
     rm -rf /etc/factory
 
-    # Other obsolete stuff
+    # Delete legacy stuff
     rm -f /home/factory/downloads
+    sed -i '/factserv start/,/factserv end/d' /etc/hosts
 
     # look for uninstall issues
     for f in $(find $here/overlay -type f,l -printf "%P\n"); do
@@ -114,7 +115,7 @@ fi
 
 if ((purge)); then
     ! [ -d /etc/factory ] || die "Currently installed, try '$0 -up' to uninstall and purge pacakges."
-    echo "Purging packages"    
+    echo "Purging packages"
 
     export DEBIAN_FRONTEND=noninteractive
     apt -qy remove --purge --autoremove ${PACKAGES[@]}

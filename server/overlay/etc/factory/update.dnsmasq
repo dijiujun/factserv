@@ -1,6 +1,8 @@
 #!/bin/bash -eu
 
-# This script is invoked by the stations CGI to update dnsmasq.conf and restart dnsmasq when changes are made to the stations database.
+# This script is invoked by the stations CGI to update
+# /etc/dnsmasq.d/stations.conf and restart dnsmasq when changes are made to the
+# stations database.
 #
 # sudoers.cfg must contain the line:
 #
@@ -10,34 +12,31 @@
 #
 # Additionally, root must have select privilege on the stations table.
 #
-# Also the file /etc/factory/config must define $dut_interface and $dut_ip
+# Also the file /etc/factory/config must define $dut_ip
 
 me=${0##*/}
 
 die() { echo $me: $* >&2; exit 1; }
 
-((UID)) && die "must be root"
+((UID==0)) || die "must be root"
 
 source /etc/factory/config
 
-echo "Configuring $dut_interface with ip $dut_ip..."
-
-# this is the file we will update
-config=/etc/dnsmasq.d/factory.conf
-
+# Our dhcp subnet
 net=${dut_ip%.*}
+
+# The file we will update
+config=/etc/dnsmasq.d/stations.conf
+
+echo "$me: updating $config for $net.0/24..."
 
 (
     flock -w5 9 || die "failed to acquire lock"
     stations=$(psql -d factory -A -t -F" " -c 'select mac,station from stations order by station') || die 'psql failed'
-    md5=$(echo $dut_interface $dut_ip $stations | md5sum | awk '{print $1}') || die 'md5sum failed'
+    md5=$(echo $net $stations | md5sum | awk '{print $1}') || die 'md5sum failed'
     if [[ $md5 != $(awk '{print $NF; exit}' $config 2>/dev/null)  ]]; then
         {
-            echo "# this file is auto-generated, do not edit ${md5%% *}"
-            echo "interface=$dut_interface"
-            echo "bind-interfaces"
-            echo "local=/localnet/"
-            echo "dhcp-range=$net.0,static"
+            echo "# This file was created by $me, do not edit ${md5%% *}"
             set -- $stations
             while (($#)); do
                 echo "dhcp-host=$1,ts$2,$net.$2,infinite"
